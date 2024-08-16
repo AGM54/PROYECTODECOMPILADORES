@@ -1,0 +1,5 @@
+fun resta(a, b) {
+     return a /b;
+}
+
+print resta(20, 4);
