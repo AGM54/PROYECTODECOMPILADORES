@@ -1,4 +1,4 @@
-// Generated from C:/Users/marce/Desktop/compi2-funciones/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.*;
