@@ -137,6 +137,16 @@ public interface CompiScriptListener extends ParseTreeListener {
 	 */
 	void exitBlock(CompiScriptParser.BlockContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link CompiScriptParser#funAnon}.
+	 * @param ctx the parse tree
+	 */
+	void enterFunAnon(CompiScriptParser.FunAnonContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link CompiScriptParser#funAnon}.
+	 * @param ctx the parse tree
+	 */
+	void exitFunAnon(CompiScriptParser.FunAnonContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link CompiScriptParser#expression}.
 	 * @param ctx the parse tree
 	 */
@@ -216,6 +226,26 @@ public interface CompiScriptListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitFactor(CompiScriptParser.FactorContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link CompiScriptParser#array}.
+	 * @param ctx the parse tree
+	 */
+	void enterArray(CompiScriptParser.ArrayContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link CompiScriptParser#array}.
+	 * @param ctx the parse tree
+	 */
+	void exitArray(CompiScriptParser.ArrayContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link CompiScriptParser#instantiation}.
+	 * @param ctx the parse tree
+	 */
+	void enterInstantiation(CompiScriptParser.InstantiationContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link CompiScriptParser#instantiation}.
+	 * @param ctx the parse tree
+	 */
+	void exitInstantiation(CompiScriptParser.InstantiationContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link CompiScriptParser#unary}.
 	 * @param ctx the parse tree

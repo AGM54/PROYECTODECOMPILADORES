@@ -37,6 +37,4 @@ public class Main {
             e.printStackTrace();
         }
     }
-
-    // Implementación de MyVisitor dentro de la clase Main
 }

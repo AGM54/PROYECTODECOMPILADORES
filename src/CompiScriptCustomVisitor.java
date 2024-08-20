@@ -20,8 +20,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     }
 
     // Visita la llamada a una función
-    @Override
+
+    //@Override
+    /*
     public Object visitCall(CompiScriptParser.CallContext ctx) {
+
         String functionName = ctx.IDENTIFIER().getText();
         CompiScriptParser.FunctionContext function = functions.get(functionName);
 
@@ -38,7 +41,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         System.err.println("Error: Función no definida " + functionName);
         return null;
-    }
+    }*/
 
     // Maneja la ejecución de una función
     private Object callFunction(CompiScriptParser.FunctionContext functionCtx, Object[] args) {
@@ -78,45 +81,113 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
-    // Visita una expresión de suma
-
+    // Visita una expresión de suma o resta (term)
     @Override
     public Object visitTerm(CompiScriptParser.TermContext ctx) {
-        if (ctx.getChildCount() == 3) { // Ej. a + b, a - b
-            Object left = visit(ctx.factor(0));
-            Object right = visit(ctx.factor(1));
+        Object result = visit(ctx.factor(0));
 
-            // Asegurar que ambos lados sean números
-            if (left instanceof Double && right instanceof Double) {
-                String operator = ctx.getChild(1).getText();
-                switch (operator) {
-                    case "+":
-                        return (Double) left + (Double) right;
-                    case "-":
-                        return (Double) left - (Double) right;
+        for (int i = 1; i < ctx.factor().size(); i++) {
+            Object nextValue = visit(ctx.factor(i));
+            String operator = ctx.getChild(2 * i - 1).getText();
+
+            if (operator.equals("+")) {
+                if (result instanceof Number && nextValue instanceof Number) {
+                    if (result instanceof Double || nextValue instanceof Double) {
+                        result = ((Number) result).doubleValue() + ((Number) nextValue).doubleValue();
+                    } else {
+                        result = ((Number) result).intValue() + ((Number) nextValue).intValue();
+                    }
+                } else if (result instanceof String && nextValue instanceof String) {
+                    result = (String) result + (String) nextValue; // String concatenation
+                } else {
+                    System.err.println("Operands must be both numbers or both strings for '+' operation.");
+                }
+            } else if (operator.equals("-")) {
+                if (result instanceof Number && nextValue instanceof Number) {
+                    if (result instanceof Double || nextValue instanceof Double) {
+                        result = ((Number) result).doubleValue() - ((Number) nextValue).doubleValue();
+                    } else {
+                        result = ((Number) result).intValue() - ((Number) nextValue).intValue();
+                    }
+                } else {
+                    System.err.println("Operands must be numbers for substraction '-' operation.");
                 }
             }
         }
-        return visit(ctx.factor(0)); // Retorna el valor de la única expresión si no hay operador binario
+        return result;
     }
+    //modulo, multiplicacion, division (factor)
     @Override
     public Object visitFactor(CompiScriptParser.FactorContext ctx) {
-        if (ctx.getChildCount() == 3) { // Ej. a * b, a / b
-            Object left = visit(ctx.unary(0));
-            Object right = visit(ctx.unary(1));
+        Object result = visit(ctx.unary(0));
 
-            // Asegurar que ambos lados sean números
-            if (left instanceof Double && right instanceof Double) {
-                String operator = ctx.getChild(1).getText();
+        for (int i = 1; i < ctx.unary().size(); i++) {
+            Object nextValue = visit(ctx.unary(i));
+            String operator = ctx.getChild(2 * i - 1).getText();
+
+            if (result instanceof Number && nextValue instanceof Number) {
                 switch (operator) {
                     case "*":
-                        return (Double) left * (Double) right;
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() * ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() * ((Number) nextValue).intValue();
+                        }
+                        break;
                     case "/":
-                        return (Double) left / (Double) right;
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() / ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() / ((Number) nextValue).intValue();
+                        }
+                        break;
+                    case "%":
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() % ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() % ((Number) nextValue).intValue();
+                        }
+                        break;
+                    default:
+                        System.err.println("Unknown operator: " + operator);
+                }
+            } else {
+                System.err.println("Operands must be numbers for '*' '/' '%' operations.");
+            }
+        }
+
+        return result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
+    }
+    //Manejo de asignaciones unarias:
+    @Override
+    public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
+        // The unary operator is the first child if it exists, followed by the operand.
+        if (ctx.getChildCount() == 2) {
+            Object value = visit(ctx.unary());
+
+            String operator = ctx.getChild(0).getText(); // Access the operator directly
+
+            if ("-".equals(operator)) {
+                if (value instanceof Number) {
+                    if (value instanceof Double) {
+                        return -((Double) value);
+                    } else {
+                        return -((Integer) value);
+                    }
+                } else {
+                    System.err.println("Unary '-' operator can only be applied to numbers.");
+                }
+            } else if ("!".equals(operator)) {
+                if (value instanceof Boolean) {
+                    return !((Boolean) value);
+                } else {
+                    System.err.println("Unary '!' operator can only be applied to boolean values.");
                 }
             }
         }
-        return visit(ctx.unary(0)); // Retorna el valor de la única expresión si no hay operador binario
+
+        // If it's not a unary operation, just visit the call (the next production rule)
+        return visit(ctx.call());
     }
     // Maneja valores primarios (números, etc.)
     @Override
@@ -137,25 +208,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return null; // Manejar otros tipos si es necesario
     }
 
-    // Visita una asignación
-    @Override
-    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx) {
-        // Verificar si la asignación sigue el patrón IDENTIFIER = expression
-        if (ctx.IDENTIFIER() != null) {
-            String varName = ctx.IDENTIFIER().getText();
-            Object value = visit(ctx.expression());  // Procesar la expresión asignada
 
-            // Asignar en el entorno local si existe, de lo contrario en el global
-            if (localVariables != null) {
-                localVariables.put(varName, value);
-            } else {
-                globalVariables.put(varName, value);
-            }
-            return value;
-        } else {
-            // Si no es una asignación, manejar la expresión como tal
-            return visit(ctx.logic_or());
-        }
-    }
 }
 

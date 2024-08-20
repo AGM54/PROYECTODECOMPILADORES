@@ -1,5 +1,6 @@
-fun resta(a, b) {
-     return a /b;
-}
-
-print resta(20, 4);
+"a" - "a";
+"a" + "a";
+1 + 1;
+"a"%1;
+"a"*2;
+a/2;
