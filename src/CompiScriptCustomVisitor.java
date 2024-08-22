@@ -27,12 +27,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     }
                 } else {
                     System.err.println("Unary '-' operator can only be applied to numbers.");
+                    return null;
                 }
             } else if ("!".equals(operator)) {
                 if (value instanceof Boolean) {
                     return !((Boolean) value);
                 } else {
                     System.err.println("Unary '!' operator can only be applied to boolean values.");
+                    return null;
                 }
             }
         }
