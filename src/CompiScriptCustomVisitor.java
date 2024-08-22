@@ -9,6 +9,91 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     // Entorno local para las variables dentro de una función
     private Map<String, Object> localVariables = null;
 
+    //Manejo de asignaciones unarias:
+    @Override
+    public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
+        // The unary operator is the first child if it exists, followed by the operand.
+        if (ctx.getChildCount() == 2) {
+            Object value = visit(ctx.unary());
+
+            String operator = ctx.getChild(0).getText(); // Access the operator directly
+
+            if ("-".equals(operator)) {
+                if (value instanceof Number) {
+                    if (value instanceof Double) {
+                        return -((Double) value);
+                    } else {
+                        return -((Integer) value);
+                    }
+                } else {
+                    System.err.println("Unary '-' operator can only be applied to numbers.");
+                }
+            } else if ("!".equals(operator)) {
+                if (value instanceof Boolean) {
+                    return !((Boolean) value);
+                } else {
+                    System.err.println("Unary '!' operator can only be applied to boolean values.");
+                }
+            }
+        }
+
+        // If it's not a unary operation, just visit the call (the next production rule)
+        return visit(ctx.call());
+    }
+    // Maneja valores primarios (números, etc.)
+    @Override
+    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
+        if (ctx.NUMBER() != null) {
+            if (ctx.NUMBER().getText().contains(".")) {
+                return Double.parseDouble(ctx.NUMBER().getText()); // Floating point number
+            } else {
+                return Integer.parseInt(ctx.NUMBER().getText()); // Integer
+            }
+        } else if (ctx.STRING() != null) {
+            // Remove the surrounding quotes
+            return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
+        } else if (ctx.IDENTIFIER() != null) {
+            String varName = ctx.IDENTIFIER().getText();
+            if (localVariables != null && localVariables.containsKey(varName)) {
+                return localVariables.get(varName);
+            } else if (globalVariables.containsKey(varName)) {
+                return globalVariables.get(varName);
+            } else {
+                System.err.println("Error: Variable no definida " + varName);
+            }
+        } else if (ctx.getText().equals("true")) {
+            return true;
+        } else if (ctx.getText().equals("false")) {
+            return false;
+        } else if (ctx.getText().equals("nil")) {
+            return null;
+        } else if (ctx.expression() != null) {
+            return visit(ctx.expression()); // Parenthesized expression
+        } else if (ctx.array() != null) {
+            return visit(ctx.array());
+        } else if (ctx.instantiation() != null) {
+            return visit(ctx.instantiation());
+        }/*else if (ctx.getText().equals("this")) {
+            return currentInstance;
+        } else if (ctx.SUPER() != null && ctx.IDENTIFIER() != null) {
+            return lookupSuper(identifier);
+        }*/
+        return null;
+    }
+    // declaracion de variables
+    @Override
+    public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
+        String varName = ctx.IDENTIFIER().getText();
+        if (localVariables != null) {
+            localVariables.put(varName, globalVariables.get(varName));
+        }
+        if (!globalVariables.containsKey(varName)) {
+            globalVariables.put(varName, ctx.getChild(0).getText());
+        }else{
+            System.err.println("Error: Variable already defined " + varName);
+        }
+        return null;
+    }
     // Visita la declaración de una función
     @Override
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
@@ -92,7 +177,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
             if (operator.equals("+")) {
                 if (result instanceof Number && nextValue instanceof Number) {
-                    if (result instanceof Double || nextValue instanceof Double) {
+                    if (result instanceof Double || nextValue instanceof Double) { // any with double = a double no matter is its int + double
                         result = ((Number) result).doubleValue() + ((Number) nextValue).doubleValue();
                     } else {
                         result = ((Number) result).intValue() + ((Number) nextValue).intValue();
@@ -100,7 +185,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 } else if (result instanceof String && nextValue instanceof String) {
                     result = (String) result + (String) nextValue; // String concatenation
                 } else {
-                    System.err.println("Operands must be both numbers or both strings for '+' operation.");
+                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result +nextValue);
                 }
             } else if (operator.equals("-")) {
                 if (result instanceof Number && nextValue instanceof Number) {
@@ -158,55 +243,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         return result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
     }
-    //Manejo de asignaciones unarias:
-    @Override
-    public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
-        // The unary operator is the first child if it exists, followed by the operand.
-        if (ctx.getChildCount() == 2) {
-            Object value = visit(ctx.unary());
 
-            String operator = ctx.getChild(0).getText(); // Access the operator directly
-
-            if ("-".equals(operator)) {
-                if (value instanceof Number) {
-                    if (value instanceof Double) {
-                        return -((Double) value);
-                    } else {
-                        return -((Integer) value);
-                    }
-                } else {
-                    System.err.println("Unary '-' operator can only be applied to numbers.");
-                }
-            } else if ("!".equals(operator)) {
-                if (value instanceof Boolean) {
-                    return !((Boolean) value);
-                } else {
-                    System.err.println("Unary '!' operator can only be applied to boolean values.");
-                }
-            }
-        }
-
-        // If it's not a unary operation, just visit the call (the next production rule)
-        return visit(ctx.call());
-    }
-    // Maneja valores primarios (números, etc.)
-    @Override
-    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
-        if (ctx.NUMBER() != null) {
-            return Double.valueOf(ctx.NUMBER().getText());
-        } else if (ctx.IDENTIFIER() != null) {
-            // Si es un identificador, busca primero en las variables locales, luego en las globales
-            String varName = ctx.IDENTIFIER().getText();
-            if (localVariables != null && localVariables.containsKey(varName)) {
-                return localVariables.get(varName);
-            } else if (globalVariables.containsKey(varName)) {
-                return globalVariables.get(varName);
-            } else {
-                System.err.println("Error: Variable no definida " + varName);
-            }
-        }
-        return null; // Manejar otros tipos si es necesario
-    }
 
 
 }
