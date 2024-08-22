@@ -88,7 +88,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             localVariables.put(varName, globalVariables.get(varName));
         }
         if (!globalVariables.containsKey(varName)) {
-            globalVariables.put(varName, ctx.getChild(0).getText());
+            Object value = null;
+            if (ctx.expression() != null) {
+                value = visit(ctx.expression());
+            }
+            globalVariables.put(varName, value);
         }else{
             System.err.println("Error: Variable already defined " + varName);
         }
@@ -185,7 +189,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 } else if (result instanceof String && nextValue instanceof String) {
                     result = (String) result + (String) nextValue; // String concatenation
                 } else {
-                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result +nextValue);
+                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result + " " + nextValue);
                 }
             } else if (operator.equals("-")) {
                 if (result instanceof Number && nextValue instanceof Number) {
@@ -195,7 +199,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         result = ((Number) result).intValue() - ((Number) nextValue).intValue();
                     }
                 } else {
-                    System.err.println("Operands must be numbers for substraction '-' operation.");
+                    System.err.println("Operands must be numbers for substraction '-' operation. " + result + " " + nextValue);
                 }
             }
         }
@@ -237,7 +241,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         System.err.println("Unknown operator: " + operator);
                 }
             } else {
-                System.err.println("Operands must be numbers for '*' '/' '%' operations.");
+                System.err.println("Operands must be numbers for '*' '/' '%' operations. found: " + result + " " + nextValue);
             }
         }
 
