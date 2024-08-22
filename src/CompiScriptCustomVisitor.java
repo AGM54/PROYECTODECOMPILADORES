@@ -29,6 +29,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Remove the surrounding quotes
             return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
         } else if (ctx.IDENTIFIER() != null) {
+            //todo agregar busqueda en funciones y clases
             String varName = ctx.IDENTIFIER().getText();
             if (localVariables != null && localVariables.containsKey(varName)) {
                 return localVariables.get(varName);
@@ -54,7 +55,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         } else if (ctx.SUPER() != null && ctx.IDENTIFIER() != null) {
             return lookupSuper(identifier);
         }*/
-        return null;
+        return visitChildren(ctx);
     }
 
     //Manejo de asignaciones unarias:
@@ -234,6 +235,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         String ClassName = ctx.IDENTIFIER().toString(); //get the class name
         if (!declaredClasses.containsKey(ClassName) ) {
             declaredClasses.put(ClassName, ctx);
+            CurrClasName = ClassName;
+            // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
+            for (CompiScriptParser.FunctionContext child : ctx.function()){
+                visit(child);
+            }
+            CurrClasName = null;
         }else{
             System.err.println("Error: Class already defined " + ClassName);
         }
