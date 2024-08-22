@@ -1,5 +1,15 @@
-fun resta(a, b) {
-     return a /b;
+// Declaración de una clase con dos funciones
+class MiClase {
+    fun metodo1() {
+        print "Hola desde metodo1";
+    }
+
+    fun metodo2() {
+        print "Hola desde metodo2";
+    }
 }
 
-print resta(20, 4);
+// Crear una instancia de MiClase y llamar a los métodos
+var instancia = new MiClase();
+instancia.metodo1();
+instancia.metodo2();

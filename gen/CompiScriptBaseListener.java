@@ -172,6 +172,18 @@ public class CompiScriptBaseListener implements CompiScriptListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterFunAnon(CompiScriptParser.FunAnonContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitFunAnon(CompiScriptParser.FunAnonContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterExpression(CompiScriptParser.ExpressionContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -263,6 +275,30 @@ public class CompiScriptBaseListener implements CompiScriptListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitFactor(CompiScriptParser.FactorContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArray(CompiScriptParser.ArrayContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArray(CompiScriptParser.ArrayContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterInstantiation(CompiScriptParser.InstantiationContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitInstantiation(CompiScriptParser.InstantiationContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
