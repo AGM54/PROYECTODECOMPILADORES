@@ -1,3 +1,5 @@
+class HelloClass{}
+class HelloClass{}
 "a" - "a";
 "a" + "a";
 1 + 1;
