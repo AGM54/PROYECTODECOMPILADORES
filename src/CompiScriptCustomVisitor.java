@@ -250,10 +250,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //declaracion de una clase
     @Override
     public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
-        String ClassName = ctx.IDENTIFIER().toString(); //get the class name
+        String ClassName = ctx.IDENTIFIER().getFirst().toString();
+        String Father = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : null;
         if (!declaredClasses.containsKey(ClassName) ) {
             declaredClasses.put(ClassName, new HashMap<String, Object>());
             this.CurrClasName = ClassName;
+            if (Father != null && !declaredClasses.containsKey(Father)) {
+                System.err.println("Error: Cannot heritate from undefined class:" + Father);
+            }
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             for (CompiScriptParser.FunctionContext child : ctx.function()){
                 visit(child);

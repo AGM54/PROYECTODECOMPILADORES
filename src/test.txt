@@ -1,3 +1,2 @@
-fun abc(a,b,c){}
-class ABC{}
-class A extends Z{}
+class A  extends Father {
+}
