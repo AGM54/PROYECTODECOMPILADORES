@@ -1,16 +1,22 @@
+import org.antlr.v4.runtime.tree.TerminalNode;
+
+import javax.lang.model.type.DeclaredType;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
+    //Stack para los contextos
+
     // Tabla de símbolos para almacenar funciones
-    private Map<String, CompiScriptParser.FunctionContext> functions = new HashMap<>();
+    private Map<String, Object> functions = new HashMap<>();
     // Tabla de símbolos para almacenar variables globales
-    private Map<String, Object> globalVariables = new HashMap<>();
-    // Entorno local para las variables dentro de una función
-    private Map<String, Object> localVariables = null;
-    private Map<String, Object> declaredClasses = new HashMap<>();
+    private Map<String,Map<String,Object>> declaredVars = new HashMap<>();
+    private Map<String, HashMap<String, Object>> declaredClasses = new HashMap<>();
     //Flag para el manejo de funciones de una clase
-    private String CurrClasName = null;
+    private String CurrClasName = "";
 
     /*
     Sección de manejo de valores atómicos o primarios
@@ -31,12 +37,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         } else if (ctx.IDENTIFIER() != null) {
             //todo agregar busqueda en funciones y clases
             String varName = ctx.IDENTIFIER().getText();
-            if (localVariables != null && localVariables.containsKey(varName)) {
-                return localVariables.get(varName);
-            } else if (globalVariables.containsKey(varName)) {
-                return globalVariables.get(varName);
-            } else {
-                System.err.println("Error: Variable no definida " + varName);
+            if (declaredVars.containsKey(varName)) {
+                return declaredVars.get(varName).get("value");
+            }
+            else {
+                System.err.println("Error: Unknown symbol :" + varName);
             }
         } else if (ctx.getText().equals("true")) {
             return true;
@@ -178,15 +183,15 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     @Override
     public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
         String varName = ctx.IDENTIFIER().getText();
-        if (localVariables != null) {
-            localVariables.put(varName, globalVariables.get(varName));
-        }
-        if (!globalVariables.containsKey(varName)) {
+        if (!declaredVars.containsKey(varName)) {
             Object value = null;
+            HashMap<String,Object> varMap = new HashMap<>();
             if (ctx.expression() != null) {
                 value = visit(ctx.expression());
+                varMap.put("value",value);
+                varMap.put("ambito",null);
             }
-            globalVariables.put(varName, value);
+            declaredVars.put(varName, varMap);
         }else{
             System.err.println("Error: Variable already defined " + varName);
         }
@@ -201,14 +206,28 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
         // Obtén el nombre de la función del primer identificador en la lista
         String functionName = ctx.IDENTIFIER().getText();
-        // Guarda la función en la tabla de funciones
-        if (CurrClasName != null){
-            //guardar en tabla de funciones
-        }else{
-            //guardar en la clase
+        HashMap<String,Object> functMap = new HashMap<>();
 
+        if(ctx.parameters() != null) {
+            List<String> parameters = new ArrayList<>();
+            for (TerminalNode param : ctx.parameters().IDENTIFIER()) {
+                parameters.add(param.getText());
+            }
+            functMap.put("params",parameters);
         }
-        functions.put(functionName, ctx);
+        functMap.put("returns",null);
+        if (CurrClasName.isEmpty()){
+            // Guarda la función en la tabla de funciones
+            declaredClasses.put(functionName,functMap);
+        }else{
+            // Guardar en la clase
+            if (!CurrClasName.isEmpty() && declaredClasses.containsKey(CurrClasName)) {
+                declaredClasses.get(this.CurrClasName).put(functionName, functMap);
+            } else {
+                // Handle the case where CurrClasName is null or does not exist in declaredClasses
+                System.err.println("Error: CurrClasName is null or not found in declaredClasses.");
+            }
+        }
         return null;
     }
 
@@ -222,7 +241,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 return visit(ctx.primary());
             }
         }else{
-
         }
         return null;
     }
@@ -234,19 +252,17 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
         String ClassName = ctx.IDENTIFIER().toString(); //get the class name
         if (!declaredClasses.containsKey(ClassName) ) {
-            declaredClasses.put(ClassName, ctx);
-            CurrClasName = ClassName;
+            declaredClasses.put(ClassName, new HashMap<String, Object>());
+            this.CurrClasName = ClassName;
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             for (CompiScriptParser.FunctionContext child : ctx.function()){
                 visit(child);
             }
-            CurrClasName = null;
+            this.CurrClasName = "";
         }else{
             System.err.println("Error: Class already defined " + ClassName);
         }
         return null;
     }
-
-
 }
 
