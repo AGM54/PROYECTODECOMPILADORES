@@ -1,22 +1,52 @@
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import javax.lang.model.type.DeclaredType;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.*;
 
-
+class Function {} //a function
+class Class {} // a class , no rocket science
+class Undefined {} //variables that only have been declared, but no value assigned
+class Method {}  //for methods , functions inside a class
+class Unknown {} //for all symbols that were not found
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Stack para los contextos
-
+    private Stack<Integer> ScopesStack = new Stack<>(){{push(0);}};
+    //the symbol table
+    private Map<String,Map<String,Object>> symbolTable = new HashMap<>();
+    //Flag para el manejo de declaracion de clases
+    private String CurrClasName = null ;
+    private String CurrVarDefining = null ;
     // Tabla de símbolos para almacenar funciones
     private Map<String, Object> functions = new HashMap<>();
     // Tabla de símbolos para almacenar variables globales
-    private Map<String,Map<String,Object>> declaredVars = new HashMap<>();
     private Map<String, HashMap<String, Object>> declaredClasses = new HashMap<>();
-    //Flag para el manejo de funciones de una clase
-    private String CurrClasName = "";
+
+    // get a list of all the methods of a class  ( useful for heriachy and inherance )
+    public List<String> findMethodsOf(String pattern) {
+        Pattern regex = Pattern.compile(pattern); // Compile the regex pattern
+        List<String> results = new ArrayList<>(); // To store the "other half" of the method names
+
+        // Iterate over each entry in the symbol table
+        for (Map.Entry<String, Map<String, Object>> entry : symbolTable.entrySet()) {
+            String keyName = entry.getKey(); // First key
+            Map<String, Object> attributes = entry.getValue();
+
+            // Check if "type" exists and is an instance of Method
+            if (attributes.containsKey("type") && attributes.get("type") instanceof Method) {
+                // Check if the key name matches the regex pattern
+                if (regex.matcher(keyName).find()) {
+                    // Split the keyName by the dot
+                    String[] parts = keyName.split("\\.");
+                    if (parts.length > 1) {
+                        // Add the second part to the results list
+                        results.add(parts[1]);
+                    }
+                }
+            }
+        }
+        return results;
+    }
 
     /*
     Sección de manejo de valores atómicos o primarios
@@ -25,6 +55,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //manejo de tipos primarios
     @Override
     public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
+
         if (ctx.NUMBER() != null) {
             if (ctx.NUMBER().getText().contains(".")) {
                 return Double.parseDouble(ctx.NUMBER().getText()); // Floating point number
@@ -35,13 +66,13 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Remove the surrounding quotes
             return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
         } else if (ctx.IDENTIFIER() != null) {
-            //todo agregar busqueda en funciones y clases
             String varName = ctx.IDENTIFIER().getText();
-            if (declaredVars.containsKey(varName)) {
-                return declaredVars.get(varName).get("value");
+            if (symbolTable.containsKey(varName)) {
+                return symbolTable.get(varName).get("type");
             }
             else {
                 System.err.println("Error: Unknown symbol :" + varName);
+                return new Unknown();
             }
         } else if (ctx.getText().equals("true")) {
             return true;
@@ -118,7 +149,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 } else if (result instanceof String && nextValue instanceof String) {
                     result = (String) result + (String) nextValue; // String concatenation
                 } else {
-                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result + " " + nextValue);
+                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
                 }
             } else if (operator.equals("-")) {
                 if (result instanceof Number && nextValue instanceof Number) {
@@ -128,7 +159,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         result = ((Number) result).intValue() - ((Number) nextValue).intValue();
                     }
                 } else {
-                    System.err.println("Operands must be numbers for substraction '-' operation. " + result + " " + nextValue);
+                    System.err.println("Operands must be numbers for substraction '-' operation. " + result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
                 }
             }
         }
@@ -170,7 +201,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         System.err.println("Unknown operator: " + operator);
                 }
             } else {
-                System.err.println("Operands must be numbers for '*' '/' '%' operations. found: " + result + " " + nextValue);
+                System.err.println("Operands must be numbers for '*' '/' '%' operations. found: " + result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
             }
         }
 
@@ -183,15 +214,22 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     @Override
     public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
         String varName = ctx.IDENTIFIER().getText();
-        if (!declaredVars.containsKey(varName)) {
-            Object value = null;
+        if (varName == null || varName.isBlank() || varName.isEmpty()) {
+            System.err.println("Error: Var must have an identifier");
+        }
+        //check if is not defined or if is not defined on this scope
+        if (!symbolTable.containsKey(varName) || symbolTable.get(varName).get("scope")!= ScopesStack.peek()) {
             HashMap<String,Object> varMap = new HashMap<>();
             if (ctx.expression() != null) {
-                value = visit(ctx.expression());
-                varMap.put("value",value);
-                varMap.put("ambito",null);
+                CurrVarDefining = varName;
+                Object type = visit(ctx.expression());
+                varMap.put("type",type);
+                CurrVarDefining = null;
+            }else{ //is just defined, no assigmen
+                varMap.put("type",new Undefined()); // the new Undefined()
             }
-            declaredVars.put(varName, varMap);
+            varMap.put("scope",ScopesStack.peek());
+            symbolTable.put(varName, varMap);
         }else{
             System.err.println("Error: Variable already defined " + varName);
         }
@@ -247,24 +285,48 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
     /* Manejo de las clases y sus instancias */
 
+
     //declaracion de una clase
     @Override
     public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
         String ClassName = ctx.IDENTIFIER().getFirst().toString();
+
         String Father = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : null;
-        if (!declaredClasses.containsKey(ClassName) ) {
-            declaredClasses.put(ClassName, new HashMap<String, Object>());
+        //chekar que no exista ni en el scope ni que sea clase
+        if (!symbolTable.containsKey(ClassName)
+                || symbolTable.get(ClassName).get("scope")!= ScopesStack.peek()
+                &&  !(symbolTable.get(ClassName).get("type") instanceof Class)) {
+
+            Map<String,Object> inner = new  HashMap<String, Object>();
+
             this.CurrClasName = ClassName;
-            if (Father != null && !declaredClasses.containsKey(Father)) {
-                System.err.println("Error: Cannot heritate from undefined class:" + Father);
+            if (Father == null) {inner.put("father",null);}
+            if (Father != null && !symbolTable.containsKey(Father)) {
+                System.err.println("Error: Cannot heritate from undefined :" + Father);
+            }else{
+                if (symbolTable.get(Father).get("scope") == ScopesStack.peek()
+                        && symbolTable.get(Father).get("type") instanceof Class
+                ) {
+                    inner.put("father",Father);
+                    //obtener atributos y metodos del padre:
+
+                }else{
+                    if(!(symbolTable.get(Father).get("type") instanceof Class)){
+                        System.err.println("Error: " + Father +  "is not a class");
+                    }
+                    if(symbolTable.get(Father).get("scope") != ScopesStack.peek()){
+                        System.err.println("Error: " + Father +  "was not found in this scope");
+                    }
+                }
             }
+            symbolTable.put(ClassName, inner);
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             for (CompiScriptParser.FunctionContext child : ctx.function()){
                 visit(child);
             }
             this.CurrClasName = "";
         }else{
-            System.err.println("Error: Class already defined " + ClassName);
+            System.err.println("Error: " + ClassName + " was already defined ");
         }
         return null;
     }
