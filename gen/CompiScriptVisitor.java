@@ -1,4 +1,4 @@
-// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from C:/Users/marce/Desktop/PROYECTODECOMPILADORES-experimental/src/CompiScript.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.tree.ParseTreeVisitor;
 
 /**
@@ -88,12 +88,6 @@ public interface CompiScriptVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitBlock(CompiScriptParser.BlockContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link CompiScriptParser#funAnon}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitFunAnon(CompiScriptParser.FunAnonContext ctx);
-	/**
 	 * Visit a parse tree produced by {@link CompiScriptParser#expression}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -141,18 +135,6 @@ public interface CompiScriptVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitFactor(CompiScriptParser.FactorContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link CompiScriptParser#array}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitArray(CompiScriptParser.ArrayContext ctx);
-	/**
-	 * Visit a parse tree produced by {@link CompiScriptParser#instantiation}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitInstantiation(CompiScriptParser.InstantiationContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link CompiScriptParser#unary}.
 	 * @param ctx the parse tree

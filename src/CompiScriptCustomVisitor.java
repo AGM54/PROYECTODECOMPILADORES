@@ -1,258 +1,171 @@
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Stack;
 
-public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
+public class CompiScriptCustomVisitor extends CompiScriptBaseVisitor<Object> {
     // Tabla de símbolos para almacenar funciones
     private Map<String, CompiScriptParser.FunctionContext> functions = new HashMap<>();
     // Tabla de símbolos para almacenar variables globales
     private Map<String, Object> globalVariables = new HashMap<>();
-    // Entorno local para las variables dentro de una función
-    private Map<String, Object> localVariables = null;
-    private Map<String, Object> declaredClasses = new HashMap<>();
-    //Flag para el manejo de funciones de una clase
-    private String CurrClasName = null;
-
-    /*
-    Sección de manejo de valores atómicos o primarios
-     */
-
-    //manejo de tipos primarios
-    @Override
-    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
-        if (ctx.NUMBER() != null) {
-            if (ctx.NUMBER().getText().contains(".")) {
-                return Double.parseDouble(ctx.NUMBER().getText()); // Floating point number
-            } else {
-                return Integer.parseInt(ctx.NUMBER().getText()); // Integer
-            }
-        } else if (ctx.STRING() != null) {
-            // Remove the surrounding quotes
-            return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
-        } else if (ctx.IDENTIFIER() != null) {
-            //todo agregar busqueda en funciones y clases
-            String varName = ctx.IDENTIFIER().getText();
-            if (localVariables != null && localVariables.containsKey(varName)) {
-                return localVariables.get(varName);
-            } else if (globalVariables.containsKey(varName)) {
-                return globalVariables.get(varName);
-            } else {
-                System.err.println("Error: Variable no definida " + varName);
-            }
-        } else if (ctx.getText().equals("true")) {
-            return true;
-        } else if (ctx.getText().equals("false")) {
-            return false;
-        } else if (ctx.getText().equals("nil")) {
-            return null;
-        } else if (ctx.expression() != null) {
-            return visit(ctx.expression()); // Parenthesized expression
-        } else if (ctx.array() != null) {
-            return visit(ctx.array());
-        } else if (ctx.instantiation() != null) {
-            return visit(ctx.instantiation());
-        }/*else if (ctx.getText().equals("this")) {
-            return currentInstance;
-        } else if (ctx.SUPER() != null && ctx.IDENTIFIER() != null) {
-            return lookupSuper(identifier);
-        }*/
-        return visitChildren(ctx);
-    }
-
-    //Manejo de asignaciones unarias:
-    @Override
-    public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
-        // The unary operator is the first child if it exists, followed by the operand.
-        if (ctx.getChildCount() == 2) {
-            Object value = visit(ctx.unary());
-
-            String operator = ctx.getChild(0).getText(); // Access the operator directly
-
-            if ("-".equals(operator)) {
-                if (value instanceof Number) {
-                    if (value instanceof Double) {
-                        return -((Double) value);
-                    } else {
-                        return -((Integer) value);
-                    }
-                } else {
-                    System.err.println("Unary '-' operator can only be applied to numbers.");
-                    return null;
-                }
-            } else if ("!".equals(operator)) {
-                if (value instanceof Boolean) {
-                    return !((Boolean) value);
-                } else {
-                    System.err.println("Unary '!' operator can only be applied to boolean values.");
-                    return null;
-                }
-            }
-        }
-
-        // If it's not a unary operation, just visit the call (the next production rule)
-        return visit(ctx.call());
-    }
-    // Maneja valores primarios (números, etc.)
-
-    /* Manejo de operaciones elementales */
-    // Visita una expresión de suma o resta (term)
-    @Override
-    public Object visitTerm(CompiScriptParser.TermContext ctx) {
-        Object result = visit(ctx.factor(0));
-
-        for (int i = 1; i < ctx.factor().size(); i++) {
-            Object nextValue = visit(ctx.factor(i));
-            String operator = ctx.getChild(2 * i - 1).getText();
-
-            if (operator.equals("+")) {
-                if (result instanceof Number && nextValue instanceof Number) {
-                    if (result instanceof Double || nextValue instanceof Double) { // any with double = a double no matter is its int + double
-                        result = ((Number) result).doubleValue() + ((Number) nextValue).doubleValue();
-                    } else {
-                        result = ((Number) result).intValue() + ((Number) nextValue).intValue();
-                    }
-                } else if (result instanceof String && nextValue instanceof String) {
-                    result = (String) result + (String) nextValue; // String concatenation
-                } else {
-                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result + " " + nextValue);
-                }
-            } else if (operator.equals("-")) {
-                if (result instanceof Number && nextValue instanceof Number) {
-                    if (result instanceof Double || nextValue instanceof Double) {
-                        result = ((Number) result).doubleValue() - ((Number) nextValue).doubleValue();
-                    } else {
-                        result = ((Number) result).intValue() - ((Number) nextValue).intValue();
-                    }
-                } else {
-                    System.err.println("Operands must be numbers for substraction '-' operation. " + result + " " + nextValue);
-                }
-            }
-        }
-        return result;
-    }
-    //modulo, multiplicacion, division (factor)
-    @Override
-    public Object visitFactor(CompiScriptParser.FactorContext ctx) {
-        Object result = visit(ctx.unary(0));
-
-        for (int i = 1; i < ctx.unary().size(); i++) {
-            Object nextValue = visit(ctx.unary(i));
-            String operator = ctx.getChild(2 * i - 1).getText();
-
-            if (result instanceof Number && nextValue instanceof Number) {
-                switch (operator) {
-                    case "*":
-                        if (result instanceof Double || nextValue instanceof Double) {
-                            result = ((Number) result).doubleValue() * ((Number) nextValue).doubleValue();
-                        } else {
-                            result = ((Number) result).intValue() * ((Number) nextValue).intValue();
-                        }
-                        break;
-                    case "/":
-                        if (result instanceof Double || nextValue instanceof Double) {
-                            result = ((Number) result).doubleValue() / ((Number) nextValue).doubleValue();
-                        } else {
-                            result = ((Number) result).intValue() / ((Number) nextValue).intValue();
-                        }
-                        break;
-                    case "%":
-                        if (result instanceof Double || nextValue instanceof Double) {
-                            result = ((Number) result).doubleValue() % ((Number) nextValue).doubleValue();
-                        } else {
-                            result = ((Number) result).intValue() % ((Number) nextValue).intValue();
-                        }
-                        break;
-                    default:
-                        System.err.println("Unknown operator: " + operator);
-                }
-            } else {
-                System.err.println("Operands must be numbers for '*' '/' '%' operations. found: " + result + " " + nextValue);
-            }
-        }
-
-        return result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
-    }
-
-    /*Manejo de Variables*/
-
-    // declaracion de variables
-    @Override
-    public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
-        String varName = ctx.IDENTIFIER().getText();
-        if (localVariables != null) {
-            localVariables.put(varName, globalVariables.get(varName));
-        }
-        if (!globalVariables.containsKey(varName)) {
-            Object value = null;
-            if (ctx.expression() != null) {
-                value = visit(ctx.expression());
-            }
-            globalVariables.put(varName, value);
-        }else{
-            System.err.println("Error: Variable already defined " + varName);
-        }
-        return null;
-    }
-
-
-    /*Manejo de Funciones*/
+    // Pila para manejar los diferentes niveles de scope
+    private Stack<Map<String, Object>> localScopes = new Stack<>();
 
     // Visita la declaración de una función
     @Override
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
-        // Obtén el nombre de la función del primer identificador en la lista
         String functionName = ctx.IDENTIFIER().getText();
-        // Guarda la función en la tabla de funciones
-        if (CurrClasName != null){
-            //guardar en tabla de funciones
-        }else{
-            //guardar en la clase
-
-        }
         functions.put(functionName, ctx);
         return null;
     }
 
-    //Manejo de llamadas
+    // Visita la llamada a una función
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
-        if (ctx.getChildCount() == 1){ //es una llamada call que termina en una primaria (alguna declaracion posiblemente )
-            if(ctx.primary().array() != null) { // ver en caso de una declaracion de array
-                return visit(ctx.primary().array());
-            }else {
-                return visit(ctx.primary());
-            }
-        }else{
+        String functionName = ctx.IDENTIFIER().getText();
+        CompiScriptParser.FunctionContext function = functions.get(functionName);
 
+        if (function != null) {
+            Object[] args = new Object[ctx.arguments().expression().size()];
+            for (int i = 0; i < ctx.arguments().expression().size(); i++) {
+                args[i] = visit(ctx.arguments().expression(i));
+            }
+            return callFunction(function, args);
         }
+
+        System.err.println("Error: Función no definida " + functionName);
         return null;
     }
 
-    /* Manejo de las clases y sus instancias */
+    // Maneja la ejecución de una función
+    private Object callFunction(CompiScriptParser.FunctionContext functionCtx, Object[] args) {
+        Map<String, Object> localVariables = new HashMap<>();
+        localScopes.push(localVariables); // Pushear el nuevo scope a la pila
 
-    //declaracion de una clase
+        for (int i = 0; i < functionCtx.parameters().IDENTIFIER().size(); i++) {
+            String paramName = functionCtx.parameters().IDENTIFIER(i).getText();
+            localVariables.put(paramName, args[i]);
+            System.out.println("Argumento '" + paramName + "' asignado a valor " + args[i] + " en el scope de la función.");
+        }
+
+        Object returnValue = null;
+        for (CompiScriptParser.DeclarationContext declCtx : functionCtx.block().declaration()) {
+            if (declCtx.statement() != null && declCtx.statement().returnStmt() != null) {
+                returnValue = visit(declCtx.statement().returnStmt().expression());
+                localScopes.pop(); // Limpiar el entorno local después de la ejecución de la función
+                return returnValue; // Salir inmediatamente al encontrar un retorno
+            } else {
+                visit(declCtx);
+            }
+        }
+
+        localScopes.pop();
+        return returnValue;
+    }
+
+    // Visita la sentencia print
     @Override
+    public Object visitPrintStmt(CompiScriptParser.PrintStmtContext ctx) {
+        Object value = visit(ctx.expression());
+        System.out.println("Imprimiendo: " + value);
+        return null;
+    }
 
+    // Visita una expresión de suma
+    @Override
+    public Object visitTerm(CompiScriptParser.TermContext ctx) {
+        if (ctx.getChildCount() == 3) {
+            Object left = visit(ctx.factor(0));
+            Object right = visit(ctx.factor(1));
 
-    public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
-        String className = ctx.IDENTIFIER(0).getText();
-        if (!declaredClasses.containsKey(className)) {
-            declaredClasses.put(className, ctx); // la clase al mapa de clases declaradas
-            CurrClasName = className; //
-
-
-            for (CompiScriptParser.FunctionContext functionCtx : ctx.function()) {
-                visitFunction(functionCtx);
+            if (left instanceof Double && right instanceof Double) {
+                String operator = ctx.getChild(1).getText();
+                switch (operator) {
+                    case "+":
+                        return (Double) left + (Double) right;
+                    case "-":
+                        return (Double) left - (Double) right;
+                }
             }
+        }
+        return visit(ctx.factor(0));
+    }
 
-            CurrClasName = null; // Limpiamos el nombre de la clase actual después de visitar todas las funciones
-        } else {
-            System.err.println("Error: Clase ya definida " + className);
+    @Override
+    public Object visitFactor(CompiScriptParser.FactorContext ctx) {
+        if (ctx.getChildCount() == 3) {
+            Object left = visit(ctx.unary(0));
+            Object right = visit(ctx.unary(1));
+
+            if (left instanceof Double && right instanceof Double) {
+                String operator = ctx.getChild(1).getText();
+                switch (operator) {
+                    case "*":
+                        return (Double) left * (Double) right;
+                    case "/":
+                        return (Double) left / (Double) right;
+                }
+            }
+        }
+        return visit(ctx.unary(0));
+    }
+
+    // Maneja valores primarios (números, etc.)
+    @Override
+    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
+        if (ctx.NUMBER() != null) {
+            return Double.valueOf(ctx.NUMBER().getText());
+        } else if (ctx.IDENTIFIER() != null) {
+            String varName = ctx.IDENTIFIER().getText();
+            for (int i = localScopes.size() - 1; i >= 0; i--) {
+                Map<String, Object> scope = localScopes.get(i);
+                if (scope.containsKey(varName)) {
+                    System.out.println("Variable '" + varName + "' encontrada en el scope local con valor " + scope.get(varName));
+                    return scope.get(varName);
+                }
+            }
+            if (globalVariables.containsKey(varName)) {
+                System.out.println("Variable '" + varName + "' encontrada en el scope global con valor " + globalVariables.get(varName));
+                return globalVariables.get(varName);
+            } else {
+                System.err.println("Error: Variable no definida " + varName);
+            }
         }
         return null;
     }
 
+    // Visita una asignación
+    @Override
+    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx) {
+        if (ctx.IDENTIFIER() != null) {
+            String varName = ctx.IDENTIFIER().getText();
+            Object value = visit(ctx.expression());
 
+            for (int i = localScopes.size() - 1; i >= 0; i--) {
+                Map<String, Object> scope = localScopes.get(i);
+                if (scope.containsKey(varName)) {
+                    scope.put(varName, value);
+                    System.out.println("Variable '" + varName + "' actualizada en el scope local con valor " + value);
+                    return value;
+                }
+            }
+            globalVariables.put(varName, value);
+            System.out.println("Variable '" + varName + "' creada o actualizada en el scope global con valor " + value);
+            return value;
+        } else {
+            return visit(ctx.logic_or());
+        }
+    }
 
+    // Visita un bloque para crear un nuevo scope
+    @Override
+    public Object visitBlock(CompiScriptParser.BlockContext ctx) {
+        localScopes.push(new HashMap<>());
+        System.out.println("Nuevo scope creado.");
 
+        super.visitBlock(ctx);
+
+        localScopes.pop();
+        System.out.println("Scope destruido.");
+        return null;
+    }
 }
-

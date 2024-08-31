@@ -1,15 +1,4 @@
-// Declaración de una clase con dos funciones
-class MiClase {
-    fun metodo1() {
-        print "Hola desde metodo1";
-    }
-
-    fun metodo2() {
-        print "Hola desde metodo2";
-    }
+fun suma (a , b ) {
+return a + b ;
 }
-
-// Crear una instancia de MiClase y llamar a los métodos
-var instancia = new MiClase();
-instancia.metodo1();
-instancia.metodo2();
+print suma (3 , 4) ;
