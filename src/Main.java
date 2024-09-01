@@ -32,7 +32,7 @@ public class Main {
             // Crear un visitor personalizado para manejar la ejecución del código
             CompiScriptCustomVisitor visitor = new CompiScriptCustomVisitor();
             visitor.visit(tree);
-
+            visitor.printSymbols();
         } catch (IOException e) {
             e.printStackTrace();
         }

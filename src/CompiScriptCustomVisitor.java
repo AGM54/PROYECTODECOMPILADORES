@@ -11,16 +11,21 @@ class Method {}  //for methods , functions inside a class
 class Unknown {} //for all symbols that were not found
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Stack para los contextos
-    private Stack<Integer> ScopesStack = new Stack<>(){{push(0);}};
-    //the symbol table
-    private Map<String,Map<String,Object>> symbolTable = new HashMap<>();
-    //Flag para el manejo de declaracion de clases
-    private String CurrClasName = null ;
-    private String CurrVarDefining = null ;
+    private Stack<String> ScopesStack = new Stack<>(){{push("0");}};
+
+    //the symbol table WILL BE CREATED FOR EACH SCOPE: Scope: SYMBOL TABLE
+    private Map<String, Map<String,Map<String,Object>>>
+            scopedSymbolTable = new HashMap<>(){{put("0",new HashMap<>());}};
+    //symbol table just for the classes
+    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredClasses = new HashMap<>(){{put("0",new HashMap<>());}};
     // Tabla de símbolos para almacenar funciones
-    private Map<String, Object> functions = new HashMap<>();
+    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredFunctions = new HashMap<>(){{put("0",new HashMap<>());}};
+    //Flag para el manejo de declaracion de clases
+    private String CurrClasName = "" ;
+    private String CurrVarDefining = "" ;
+    private String CurrFuncName = "";
+    private Integer AnonCount = 0; //for all blocks that are on Anon fucntion
     // Tabla de símbolos para almacenar variables globales
-    private Map<String, HashMap<String, Object>> declaredClasses = new HashMap<>();
 
     // get a list of all the methods of a class  ( useful for heriachy and inherance )
     public List<String> findMethodsOf(String pattern) {
@@ -28,7 +33,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         List<String> results = new ArrayList<>(); // To store the "other half" of the method names
 
         // Iterate over each entry in the symbol table
-        for (Map.Entry<String, Map<String, Object>> entry : symbolTable.entrySet()) {
+        for (Map.Entry<String, Map<String, Object>> entry : scopedDeclaredFunctions.get(ScopesStack.peek().toString()).entrySet()) {
             String keyName = entry.getKey(); // First key
             Map<String, Object> attributes = entry.getValue();
 
@@ -47,7 +52,40 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return results;
     }
-
+    public void printSymbols() {
+        System.out.println("Symbols: ");
+        System.out.println("|Name|\t|Scope|\t|Type|\t|Super|\t|Arguments|");
+        scopedSymbolTable.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (scope)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            data.getOrDefault("params", "")
+                    );
+                }
+            });
+        });
+        scopedDeclaredClasses.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (scope)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            data.getOrDefault("params", "")
+                    );
+                }
+            });
+        });
+        scopedDeclaredFunctions.forEach((s,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (s)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father","") + "|" +
+                            data.getOrDefault("params","")
+                    );
+                }
+            });
+        });
+    }
     /*
     Sección de manejo de valores atómicos o primarios
      */
@@ -67,8 +105,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
         } else if (ctx.IDENTIFIER() != null) {
             String varName = ctx.IDENTIFIER().getText();
-            if (symbolTable.containsKey(varName)) {
-                return symbolTable.get(varName).get("type");
+            if (scopedSymbolTable.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedSymbolTable.get(ScopesStack.peek()).get(varName).get("type");
+            }
+            else if (scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedDeclaredClasses.get(ScopesStack.peek()).get(varName).get("type");
+            }
+            else if (scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedDeclaredFunctions.get(ScopesStack.peek()).get(varName).get("type");
             }
             else {
                 System.err.println("Error: Unknown symbol :" + varName);
@@ -100,9 +144,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         // The unary operator is the first child if it exists, followed by the operand.
         if (ctx.getChildCount() == 2) {
             Object value = visit(ctx.unary());
-
             String operator = ctx.getChild(0).getText(); // Access the operator directly
-
             if ("-".equals(operator)) {
                 if (value instanceof Number) {
                     if (value instanceof Double) {
@@ -133,6 +175,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     // Visita una expresión de suma o resta (term)
     @Override
     public Object visitTerm(CompiScriptParser.TermContext ctx) {
+        System.out.println(ScopesStack.peek());
         Object result = visit(ctx.factor(0));
 
         for (int i = 1; i < ctx.factor().size(); i++) {
@@ -218,7 +261,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             System.err.println("Error: Var must have an identifier");
         }
         //check if is not defined or if is not defined on this scope
-        if (!symbolTable.containsKey(varName) || symbolTable.get(varName).get("scope")!= ScopesStack.peek()) {
+        if (!scopedSymbolTable.get(ScopesStack.peek().toString()).containsKey(varName)) {
             HashMap<String,Object> varMap = new HashMap<>();
             if (ctx.expression() != null) {
                 CurrVarDefining = varName;
@@ -229,7 +272,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 varMap.put("type",new Undefined()); // the new Undefined()
             }
             varMap.put("scope",ScopesStack.peek());
-            symbolTable.put(varName, varMap);
+            scopedSymbolTable.get(ScopesStack.peek().toString()).put(varName, varMap);
         }else{
             System.err.println("Error: Variable already defined " + varName);
         }
@@ -252,20 +295,44 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 parameters.add(param.getText());
             }
             functMap.put("params",parameters);
+            functMap.put("scope", ScopesStack.peek());
         }
         functMap.put("returns",null);
         if (CurrClasName.isEmpty()){
             // Guarda la función en la tabla de funciones
-            declaredClasses.put(functionName,functMap);
+            functMap.put("type",new Function());
+            if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
+                scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
+            }else{
+                System.err.println("Error: Function already defined" + functionName);
+            }
         }else{
             // Guardar en la clase
-            if (!CurrClasName.isEmpty() && declaredClasses.containsKey(CurrClasName)) {
-                declaredClasses.get(this.CurrClasName).put(functionName, functMap);
+            if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
+                if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + functionName)){
+                    functMap.put("type",new Method());
+                    scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
+                }else{
+                    System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
+                }
+
             } else {
                 // Handle the case where CurrClasName is null or does not exist in declaredClasses
-                System.err.println("Error: CurrClasName is null or not found in declaredClasses.");
+                System.err.println("Error: " + CurrClasName + " found in declaredClasses.");
             }
         }
+        CurrFuncName = functionName;
+        visitChildren(ctx);
+        CurrFuncName = "";
+        return null;
+    }
+    //the return statement
+    @Override
+    public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx) {
+        if (ctx.expression()!= null) {
+            return visit(ctx.expression());
+        }
+         // a simple return , return a null
         return null;
     }
 
@@ -283,6 +350,55 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
+    //function block
+    @Override
+    public Object visitBlock(CompiScriptParser.BlockContext ctx) {
+        // Generate a new context
+        String newScope;
+        if (!CurrClasName.isEmpty()) {
+            if (!CurrFuncName.isEmpty()) {
+                newScope = CurrClasName + "." + CurrFuncName;
+            } else {
+                newScope = CurrClasName;
+            }
+        } else if (!CurrFuncName.isEmpty()) {
+            newScope = CurrFuncName;
+        } else {
+            newScope = "Anon" + AnonCount;
+            AnonCount++;
+        }
+
+        // Create new symbol tables for the new scope
+        Map<String, Map<String, Object>> functMap = new HashMap<>();
+        Map<String, Map<String, Object>> symbolMap = new HashMap<>();
+        Map<String, Map<String, Object>> classMap = new HashMap<>();
+
+        // Populate new symbol tables from the existing scope
+        functMap.putAll(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        symbolMap.putAll(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        classMap.putAll(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+
+        // Insert new scope into the symbol table maps
+        scopedDeclaredFunctions.put(newScope, functMap);
+        scopedSymbolTable.put(newScope, symbolMap);
+        scopedDeclaredClasses.put(newScope, classMap);
+
+        // Push the new Scope into the stack
+        ScopesStack.push(newScope);
+
+        // Visit the child nodes
+        Object lastDeclared = null;
+        for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
+            lastDeclared = visit(child);
+        }
+
+        // Pop the Scope after processing
+        ScopesStack.pop();
+
+        return lastDeclared;
+    }
+
+
     /* Manejo de las clases y sus instancias */
 
 
@@ -293,33 +409,19 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         String Father = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : null;
         //chekar que no exista ni en el scope ni que sea clase
-        if (!symbolTable.containsKey(ClassName)
-                || symbolTable.get(ClassName).get("scope")!= ScopesStack.peek()
-                &&  !(symbolTable.get(ClassName).get("type") instanceof Class)) {
-
+        if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(ClassName)) {
             Map<String,Object> inner = new  HashMap<String, Object>();
-
+            inner.put("type",new Class());
+            inner.put("scope",ScopesStack.peek());
             this.CurrClasName = ClassName;
             if (Father == null) {inner.put("father",null);}
-            if (Father != null && !symbolTable.containsKey(Father)) {
-                System.err.println("Error: Cannot heritate from undefined :" + Father);
-            }else{
-                if (symbolTable.get(Father).get("scope") == ScopesStack.peek()
-                        && symbolTable.get(Father).get("type") instanceof Class
-                ) {
-                    inner.put("father",Father);
-                    //obtener atributos y metodos del padre:
-
-                }else{
-                    if(!(symbolTable.get(Father).get("type") instanceof Class)){
-                        System.err.println("Error: " + Father +  "is not a class");
-                    }
-                    if(symbolTable.get(Father).get("scope") != ScopesStack.peek()){
-                        System.err.println("Error: " + Father +  "was not found in this scope");
-                    }
+            else{
+                if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(Father)) {
+                    System.err.println("Error: Cannot inherit from undefined :" + Father);
                 }
             }
-            symbolTable.put(ClassName, inner);
+
+            scopedDeclaredClasses.get(ScopesStack.peek().toString()).put(ClassName, inner);
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             for (CompiScriptParser.FunctionContext child : ctx.function()){
                 visit(child);
@@ -330,5 +432,16 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return null;
     }
+
+    /*
+    * Manejo de Operaciones Lógicas ( ifs,
+    * */
+
+    //Lógica de los OR
+
+    //Lógica de los AND
+
+    //lógica de las comparaciones
+
 }
 

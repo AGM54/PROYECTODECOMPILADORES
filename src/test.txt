@@ -1,1 +1,11 @@
-A + 1;
+class Test{
+    MethodInsideClass(a,b){
+        var z = 2;
+        class ClassInsideMethod{
+            anotherMethodInsideAClassInsideAMethod(){
+                var aVarInsideAMethodInsideAClassInsideAMethodInsideAClass;
+            }
+        }
+    }
+}
+print aVarInsideAMethodInsideAClassInsideAMethodInsideAClass;
