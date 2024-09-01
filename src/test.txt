@@ -1,13 +1,6 @@
 class Test{
-    init(a){
-    this.a = 1;
+    init(a)
+    {
     }
-    MethodInsideClass(){}
 }
-var x;
-var bool = 1 != 2;
-bool = 1 > 2;
-bool = 1 == 2;
-bool = 1 <= 2;
-bool = 1 >= 2;
-bool = 1 >= x;
+var test = new Test(12);

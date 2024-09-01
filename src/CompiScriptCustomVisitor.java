@@ -17,9 +17,12 @@ class Function {
     }
 } //a function
 class Class {} // a class , no rocket science
+class Instance{}
 class Undefined {} //variables that only have been declared, but no value assigned
 class Method extends Function{}  //for methods , functions inside a class
 class Unknown {} //for all symbols that were not found
+class ThisDirective{}
+class SuperConstructor {}
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Stack para los contextos
     private Stack<String> ScopesStack = new Stack<>(){{push("0");}};
@@ -140,11 +143,13 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             return visit(ctx.array());
         } else if (ctx.instantiation() != null) {
             return visit(ctx.instantiation());
-        }/*else if (ctx.getText().equals("this")) {
-            return currentInstance;
-        } else if (ctx.SUPER() != null && ctx.IDENTIFIER() != null) {
-            return lookupSuper(identifier);
-        }*/
+        }else if (ctx.getText().equals("this")) {
+            return new ThisDirective();
+        }else if (ctx.getText().equals("super")) {
+            return new SuperConstructor();
+        } else if (ctx.instantiation() != null) {
+            System.out.println("is an instance");
+        }
         return visitChildren(ctx);
     }
 
@@ -270,10 +275,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         //check if is not defined or if is not defined on this scope
         if (!scopedSymbolTable.get(ScopesStack.peek().toString()).containsKey(varName)) {
+            CurrClasName = varName;
             HashMap<String,Object> varMap = new HashMap<>();
             if (ctx.expression() != null) {
                 CurrVarDefining = varName;
                 Object type = visit(ctx.expression());
+                CurrClasName = "";
                 varMap.put("type",type);
                 CurrVarDefining = null;
             }else{ //is just defined, no assigmen
@@ -303,8 +310,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 parameters.add(param.getText());
             }
             functMap.put("params",parameters);
-            functMap.put("scope", ScopesStack.peek());
         }
+        functMap.put("scope", ScopesStack.peek());
         functMap.put("returns",null);
         functMap.put("ctx",ctx);
         if (CurrClasName.isEmpty()){
@@ -348,17 +355,85 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Manejo de llamadas
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
-        if (ctx.getChildCount() == 1){ //es una llamada call que termina en una primaria (alguna declaracion posiblemente )
-            if(ctx.primary().array() != null) { // ver en caso de una declaracion de array
+        if (ctx.getChildCount() == 1){ //primary call
+            if(ctx.primary().array() != null) { // is an array (somehow)
                 return visit(ctx.primary().array());
-            }else {
+            }else { //just a primary
                 return visit(ctx.primary());
             }
-        }else{
+        }else if (ctx.primary().instantiation().getChildCount()> 0){ //create an instance
+            System.out.println("is an instance");
+            String nombreClase = ctx.primary().instantiation().getChild(1).getText();
+            System.out.println(nombreClase);
+
         }
         return null;
     }
+    //visit the arguments
+    @Override
+    public Object visitArguments(CompiScriptParser.ArgumentsContext ctx){
+        List<CompiScriptParser.ExpressionContext>  arguments = new ArrayList<>();
+        for (int i = 0; i < ctx.getChildCount() ; i++){
+            Object child = ctx.getChild(i);
+            if( child instanceof CompiScriptParser.ExpressionContext ){
+                arguments.add((CompiScriptParser.ExpressionContext) child);
+            }else{
+                visit(ctx.getChild(i));
+            }
+        }
+        return arguments;
+    }
 
+    //new instance
+    @Override
+    public Object visitInstantiation(CompiScriptParser.InstantiationContext ctx){
+        //chek if it exists tho
+        if(!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(ctx.IDENTIFIER().getText())) {
+            System.err.println("Error: Cannot make and Instance from undefinded: " + ctx.IDENTIFIER().getText());
+        }
+        //check for an init method
+        if(!scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(ctx.IDENTIFIER().getText() +".init")){
+            if(ctx.arguments() != null) {
+                System.err.println("Error : " + ctx.IDENTIFIER().getText() + " has no arguments to receive");
+            }
+        }else{
+            Map<String,Object> funcMap = scopedDeclaredFunctions.get(ScopesStack.peek()).get(ctx.IDENTIFIER().getText() +".init");
+            Object args = funcMap.getOrDefault("params",null);
+            if(args != null) {
+                List<Object> params = new ArrayList<>((Collection) args);
+                List<CompiScriptParser.ExpressionContext> received = (List<CompiScriptParser.ExpressionContext>) visit(ctx.arguments());
+                System.out.println(received);
+                if(ctx.arguments() == null || params.size() !=  received.size()) {
+                    System.err.println("Error : " + ctx.IDENTIFIER().getText() + " expected "
+                            + params.size()  + " arguments " + (ctx.arguments() == null ? " none" : received.size())
+                            + " were given");
+                }else{
+                    String newScope = CurrVarDefining;
+                    // Create new symbol tables for the new scope
+                    // Populate new symbol tables from the existing scope
+                    Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+
+                    // Insert new scope into the symbol table maps
+                    scopedDeclaredFunctions.put(newScope, functMap);
+                    scopedSymbolTable.put(newScope, symbolMap);
+                    scopedDeclaredClasses.put(newScope, classMap);
+
+                    // Push the new Scope into the stack
+                    ScopesStack.push(newScope);
+                    for(int i = 0 ; i < params.size() ; i++){
+                        String paramName = params.get(i).toString();
+                        Object type = visit(received.get(i));
+                    }
+                    Method init = (Method)funcMap.get("type");
+                    visit(init.getCtx());
+                    ScopesStack.pop();
+                }
+            }
+        }
+        return new Instance();
+    }
     //function block
     @Override
     public Object visitBlock(CompiScriptParser.BlockContext ctx) {
