@@ -1,71 +1,67 @@
 grammar CompiScript;
 
-// Reglas de inicio
-program     : declaration* EOF ;
-declaration : classDecl
-            | funDecl
-            | varDecl
-            | statement ;
+program         : declaration* EOF ;
 
-// Declaraciones de clase, función, variable
-classDecl   : 'class' IDENTIFIER ('<' IDENTIFIER)? '{' function* '}' ;
-funDecl     : 'fun' function ;
-varDecl     : 'var' IDENTIFIER ('=' expression)? ';' ;
+declaration     : classDecl
+                | funDecl
+                | varDecl
+                | statement ;
 
-// Declaraciones de sentencias
-statement   : exprStmt
-            | forStmt
-            | ifStmt
-            | printStmt
-            | returnStmt
-            | whileStmt
-            | block ;
+classDecl       : 'class' IDENTIFIER ('extends' IDENTIFIER)? '{' function* '}' ;
+funDecl         : 'fun' function ;
+varDecl         : 'var' IDENTIFIER ('=' expression)? ';' ;
 
-exprStmt    : expression ';' ;
-forStmt     : 'for' '(' ( varDecl | exprStmt | ';' ) expression? ';' expression? ')' statement ;
-ifStmt      : 'if' '(' expression ')' statement ( 'else' statement )? ;
-printStmt   : 'print' expression ';' ;
-returnStmt  : 'return' expression? ';' ;
-whileStmt   : 'while' '(' expression ')' statement ;
-block       : '{' declaration* '}' ;
+statement       : exprStmt
+                | forStmt
+                | ifStmt
+                | printStmt
+                | returnStmt
+                | whileStmt
+                | block ;
 
-// Expresiones
-expression  : assignment ;
-assignment  : IDENTIFIER '=' expression
-            | logic_or ; // Separar asignaciones y expresiones aritméticas
+exprStmt        : expression ';' ;
+forStmt         : 'for' '(' (varDecl | exprStmt | ';') expression? ';' expression? ')' statement ;
+ifStmt          : 'if' '(' expression ')' statement ('else' statement)? ;
+printStmt       : 'print' expression ';' ;
+returnStmt      : 'return' expression? ';' ;
+whileStmt       : 'while' '(' expression ')' statement ;
+block           : '{' declaration* '}' ;
+funAnon         : 'fun' '(' parameters? ')' block;
 
-logic_or    : logic_and ( 'or' logic_and )* ;
-logic_and   : equality ( 'and' equality )* ;
-equality    : comparison ( ( '!=' | '==' ) comparison )* ;
-comparison  : term ( ( '>' | '>=' | '<' | '<=' ) term )* ;
-term        : factor ( ( '-' | '+' ) factor )* ;
-factor      : unary ( ( '/' | '*' ) unary )* ;
-unary       : ( '!' | '-' ) unary
-            | call
-            | primary ;  // Añadimos primary directamente en unary
+expression      : assignment
+                | funAnon;
 
-call        : IDENTIFIER '(' arguments? ')' ;  // Manejo adecuado de llamadas a funciones
+assignment      : (call '.')? IDENTIFIER '=' assignment
+                | logic_or;
 
-primary     : 'true'
-            | 'false'
-            | 'nil'
-            | 'this'
-            | NUMBER
-            | STRING
-            | IDENTIFIER
-            | '(' expression ')'
-            | 'super' '.' IDENTIFIER ; // Añadimos super como primary
+logic_or        : logic_and ('or' logic_and)* ;
+logic_and       : equality ('and' equality)* ;
+equality        : comparison (( '!=' | '==' ) comparison)* ;
+comparison      : term (( '>' | '>=' | '<' | '<=' ) term)* ;
+term            : factor (( '-' | '+' ) factor)* ;
+factor          : unary (( '/' | '*' | '%'  ) unary)* ;
+array           : '[' (expression (',' expression)*)? ']';
+instantiation   : 'new' IDENTIFIER '(' arguments? ')';
 
-function    : IDENTIFIER '(' parameters? ')' block ;  // Definición de funciones
-parameters  : IDENTIFIER ( ',' IDENTIFIER )* ;        // Lista de parámetros
-arguments   : expression ( ',' expression )* ;        // Lista de argumentos
+unary           : ( '!' | '-' ) unary
+                | call ;
 
-// Reglas léxicas
-NUMBER      : DIGIT+ ( '.' DIGIT+ )? ;   // Manejo de números
-STRING      : '"' (~["\\])* '"' ;        // Manejo de cadenas
-IDENTIFIER  : ALPHA ( ALPHA | DIGIT )* ; // Manejo de identificadores
-fragment ALPHA  : [a-zA-Z_] ;            // Letras
-fragment DIGIT  : [0-9] ;                // Dígitos
+call            : primary ( '(' arguments? ')' | '.' IDENTIFIER | '[' expression ']')*
+                | funAnon;
 
-// Ignorar espacios en blanco
-WS          : [ \t\r\n]+ -> skip ;       // Ignorar espacios y saltos de línea
+primary         : 'true' | 'false' | 'nil' | 'this'
+                | NUMBER | STRING | IDENTIFIER | '(' expression ')'
+                | 'super' '.' IDENTIFIER
+                | array | instantiation;
+
+function        : IDENTIFIER '(' parameters? ')' block ;
+parameters      : IDENTIFIER ( ',' IDENTIFIER )* ;
+arguments       : expression ( ',' expression )* ;
+
+NUMBER          : DIGIT+ ( '.' DIGIT+ )? ;
+STRING          : '"' (~["\\])* '"' ;
+IDENTIFIER      : ALPHA ( ALPHA | DIGIT )* ;
+fragment ALPHA  : [a-zA-Z_] ;
+fragment DIGIT  : [0-9] ;
+WS              : [ \t\r\n]+ -> skip ;
+ONE_LINE_COMMENT: '//' (~ '\n')* '\n'? -> skip;

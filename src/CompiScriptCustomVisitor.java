@@ -1,161 +1,534 @@
-import java.util.HashMap;
-import java.util.Map;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
+import javax.lang.model.type.DeclaredType;
+import java.util.regex.Pattern;
+import java.util.*;
+
+class Function {
+    private CompiScriptParser.FunctionContext ctx = null;
+
+    public void setCtx(CompiScriptParser.FunctionContext ctx) {
+        this.ctx = ctx;
+    }
+
+    public CompiScriptParser.FunctionContext getCtx() {
+        return ctx;
+    }
+} //a function
+class Class {} // a class , no rocket science
+class Undefined {} //variables that only have been declared, but no value assigned
+class Method extends Function{}  //for methods , functions inside a class
+class Unknown {} //for all symbols that were not found
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
+    //Stack para los contextos
+    private Stack<String> ScopesStack = new Stack<>(){{push("0");}};
+
+    //the symbol table WILL BE CREATED FOR EACH SCOPE: Scope: SYMBOL TABLE
+    private Map<String, Map<String,Map<String,Object>>>
+            scopedSymbolTable = new HashMap<>(){{put("0",new HashMap<>());}};
+    //symbol table just for the classes
+    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredClasses = new HashMap<>(){{put("0",new HashMap<>());}};
     // Tabla de símbolos para almacenar funciones
-    private Map<String, CompiScriptParser.FunctionContext> functions = new HashMap<>();
+    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredFunctions = new HashMap<>(){{put("0",new HashMap<>());}};
+    //Flag para el manejo de declaracion de clases
+    private String CurrClasName = "" ;
+    private String CurrVarDefining = "" ;
+    private String CurrFuncName = "";
+    private Integer AnonCount = 0; //for all blocks that are on Anon fucntion
     // Tabla de símbolos para almacenar variables globales
-    private Map<String, Object> globalVariables = new HashMap<>();
-    // Entorno local para las variables dentro de una función
-    private Map<String, Object> localVariables = null;
+
+    // get a list of all the methods of a class  ( useful for heriachy and inherance )
+    public List<String> findMethodsOf(String pattern) {
+        Pattern regex = Pattern.compile(pattern); // Compile the regex pattern
+        List<String> results = new ArrayList<>(); // To store the "other half" of the method names
+
+        // Iterate over each entry in the symbol table
+        for (Map.Entry<String, Map<String, Object>> entry : scopedDeclaredFunctions.get(ScopesStack.peek().toString()).entrySet()) {
+            String keyName = entry.getKey(); // First key
+            Map<String, Object> attributes = entry.getValue();
+
+            // Check if "type" exists and is an instance of Method
+            if (attributes.containsKey("type") && attributes.get("type") instanceof Method) {
+                // Check if the key name matches the regex pattern
+                if (regex.matcher(keyName).find()) {
+                    // Split the keyName by the dot
+                    String[] parts = keyName.split("\\.");
+                    if (parts.length > 1) {
+                        // Add the second part to the results list
+                        results.add(parts[1]);
+                    }
+                }
+            }
+        }
+        return results;
+    }
+    public void printSymbols() {
+        System.out.println("Symbols: ");
+        System.out.println("|Name|\t|Scope|\t|Type|\t|Super|\t|Arguments|");
+        scopedSymbolTable.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (scope)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.getOrDefault("type","Undefined").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            data.getOrDefault("params", "")
+                    );
+                }
+            });
+        });
+        scopedDeclaredClasses.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (scope)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            data.getOrDefault("params", "")
+                    );
+                }
+            });
+        });
+        scopedDeclaredFunctions.forEach((s,table)->{
+            table.forEach((id,data)->{
+                if (data.get("scope") == (s)) {
+                    System.out.println("|" + id + "|" + data.get("scope") + "|"
+                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father","") + "|" +
+                            data.getOrDefault("params","")
+                    );
+                }
+            });
+        });
+    }
+    /*
+    Sección de manejo de valores atómicos o primarios
+     */
+
+    //manejo de tipos primarios
+    @Override
+    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
+        if (ctx.NUMBER() != null) {
+            if (ctx.NUMBER().getText().contains(".")) {
+                return Double.parseDouble(ctx.NUMBER().getText()); // Floating point number
+            } else {
+                return Integer.parseInt(ctx.NUMBER().getText()); // Integer
+            }
+        } else if (ctx.STRING() != null) {
+            // Remove the surrounding quotes
+            return ctx.STRING().getText().substring(1, ctx.STRING().getText().length() - 1);
+        } else if (ctx.IDENTIFIER() != null) {
+            String varName = ctx.IDENTIFIER().getText();
+            if (scopedSymbolTable.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedSymbolTable.get(ScopesStack.peek()).get(varName).get("type");
+            }
+            else if (scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedDeclaredClasses.get(ScopesStack.peek()).get(varName).get("type");
+            }
+            else if (scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(varName)) {
+                return scopedDeclaredFunctions.get(ScopesStack.peek()).get(varName).get("type");
+            }
+            else {
+                System.err.println("Error: Unknown symbol :" + varName);
+                return new Unknown();
+            }
+        } else if (ctx.getText().equals("true")) {
+            return true;
+        } else if (ctx.getText().equals("false")) {
+            return false;
+        } else if (ctx.getText().equals("nil")) {
+            return null;
+        } else if (ctx.expression() != null) {
+            return visit(ctx.expression()); // Parenthesized expression
+        } else if (ctx.array() != null) {
+            return visit(ctx.array());
+        } else if (ctx.instantiation() != null) {
+            return visit(ctx.instantiation());
+        }/*else if (ctx.getText().equals("this")) {
+            return currentInstance;
+        } else if (ctx.SUPER() != null && ctx.IDENTIFIER() != null) {
+            return lookupSuper(identifier);
+        }*/
+        return visitChildren(ctx);
+    }
+
+    //Manejo de asignaciones unarias:
+    @Override
+    public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
+        // The unary operator is the first child if it exists, followed by the operand.
+        if (ctx.getChildCount() == 2) {
+            Object value = visit(ctx.unary());
+            String operator = ctx.getChild(0).getText(); // Access the operator directly
+            if ("-".equals(operator)) {
+                if (value instanceof Number) {
+                    if (value instanceof Double) {
+                        return -((Double) value);
+                    } else {
+                        return -((Integer) value);
+                    }
+                } else {
+                    System.err.println("Unary '-' operator can only be applied to numbers.");
+                    return null;
+                }
+            } else if ("!".equals(operator)) {
+                if (value instanceof Boolean) {
+                    return !((Boolean) value);
+                } else {
+                    System.err.println("Unary '!' operator can only be applied to boolean values.");
+                    return null;
+                }
+            }
+        }
+
+        // If it's not a unary operation, just visit the call (the next production rule)
+        return visit(ctx.call());
+    }
+    // Maneja valores primarios (números, etc.)
+
+    /* Manejo de operaciones elementales */
+    // Visita una expresión de suma o resta (term)
+    @Override
+    public Object visitTerm(CompiScriptParser.TermContext ctx) {
+        System.out.println(ScopesStack.peek());
+        Object result = visit(ctx.factor(0));
+
+        for (int i = 1; i < ctx.factor().size(); i++) {
+            Object nextValue = visit(ctx.factor(i));
+            String operator = ctx.getChild(2 * i - 1).getText();
+
+            if (operator.equals("+")) {
+                if (result instanceof Number && nextValue instanceof Number) {
+                    if (result instanceof Double || nextValue instanceof Double) { // any with double = a double no matter is its int + double
+                        result = ((Number) result).doubleValue() + ((Number) nextValue).doubleValue();
+                    } else {
+                        result = ((Number) result).intValue() + ((Number) nextValue).intValue();
+                    }
+                } else if (result instanceof String && nextValue instanceof String) {
+                    result = (String) result + (String) nextValue; // String concatenation
+                } else {
+                    System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
+                }
+            } else if (operator.equals("-")) {
+                if (result instanceof Number && nextValue instanceof Number) {
+                    if (result instanceof Double || nextValue instanceof Double) {
+                        result = ((Number) result).doubleValue() - ((Number) nextValue).doubleValue();
+                    } else {
+                        result = ((Number) result).intValue() - ((Number) nextValue).intValue();
+                    }
+                } else {
+                    System.err.println("Operands must be numbers for substraction '-' operation. " + result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
+                }
+            }
+        }
+        return result;
+    }
+    //modulo, multiplicacion, division (factor)
+    @Override
+    public Object visitFactor(CompiScriptParser.FactorContext ctx) {
+        Object result = visit(ctx.unary(0));
+
+        for (int i = 1; i < ctx.unary().size(); i++) {
+            Object nextValue = visit(ctx.unary(i));
+            String operator = ctx.getChild(2 * i - 1).getText();
+
+            if (result instanceof Number && nextValue instanceof Number) {
+                switch (operator) {
+                    case "*":
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() * ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() * ((Number) nextValue).intValue();
+                        }
+                        break;
+                    case "/":
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() / ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() / ((Number) nextValue).intValue();
+                        }
+                        break;
+                    case "%":
+                        if (result instanceof Double || nextValue instanceof Double) {
+                            result = ((Number) result).doubleValue() % ((Number) nextValue).doubleValue();
+                        } else {
+                            result = ((Number) result).intValue() % ((Number) nextValue).intValue();
+                        }
+                        break;
+                    default:
+                        System.err.println("Unknown operator: " + operator);
+                }
+            } else {
+                System.err.println("Operands must be numbers for '*' '/' '%' operations. found: " + result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
+            }
+        }
+
+        return result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
+    }
+
+    /*Manejo de Variables*/
+
+    // declaracion de variables
+    @Override
+    public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
+        String varName = ctx.IDENTIFIER().getText();
+        if (varName == null || varName.isBlank() || varName.isEmpty()) {
+            System.err.println("Error: Var must have an identifier");
+        }
+        //check if is not defined or if is not defined on this scope
+        if (!scopedSymbolTable.get(ScopesStack.peek().toString()).containsKey(varName)) {
+            HashMap<String,Object> varMap = new HashMap<>();
+            if (ctx.expression() != null) {
+                CurrVarDefining = varName;
+                Object type = visit(ctx.expression());
+                varMap.put("type",type);
+                CurrVarDefining = null;
+            }else{ //is just defined, no assigmen
+                varMap.put("type",new Undefined()); // the new Undefined()
+            }
+            varMap.put("scope",ScopesStack.peek());
+            scopedSymbolTable.get(ScopesStack.peek().toString()).put(varName, varMap);
+        }else{
+            System.err.println("Error: Variable already defined " + varName);
+        }
+        return null;
+    }
+
+
+    /*Manejo de Funciones*/
 
     // Visita la declaración de una función
     @Override
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
         // Obtén el nombre de la función del primer identificador en la lista
         String functionName = ctx.IDENTIFIER().getText();
-        // Guarda la función en la tabla de funciones
-        functions.put(functionName, ctx);
+        HashMap<String,Object> functMap = new HashMap<>();
+
+        if(ctx.parameters() != null) {
+            List<String> parameters = new ArrayList<>();
+            for (TerminalNode param : ctx.parameters().IDENTIFIER()) {
+                parameters.add(param.getText());
+            }
+            functMap.put("params",parameters);
+            functMap.put("scope", ScopesStack.peek());
+        }
+        functMap.put("returns",null);
+        functMap.put("ctx",ctx);
+        if (CurrClasName.isEmpty()){
+            // Guarda la función en la tabla de funciones
+            functMap.put("type",new Function(){{setCtx(ctx);}});
+            if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
+                scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
+            }else{
+                System.err.println("Error: Function already defined" + functionName);
+            }
+        }else{
+            // Guardar en la clase
+            if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
+                if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + functionName)){
+                    functMap.put("type",new Method(){{setCtx(ctx);}});
+                    scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
+                }else{
+                    System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
+                }
+
+            } else {
+                // Handle the case where CurrClasName is null or does not exist in declaredClasses
+                System.err.println("Error: " + CurrClasName + " found in declaredClasses.");
+            }
+        }
+        CurrFuncName = functionName;
+        visitChildren(ctx);
+        CurrFuncName = "";
+        return null;
+    }
+    //the return statement
+    @Override
+    public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx) {
+        if (ctx.expression()!= null) {
+            return visit(ctx.expression());
+        }
+         // a simple return , return a null
         return null;
     }
 
-    // Visita la llamada a una función
+    //Manejo de llamadas
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
-        String functionName = ctx.IDENTIFIER().getText();
-        CompiScriptParser.FunctionContext function = functions.get(functionName);
-
-        if (function != null) {
-            // Evaluar los argumentos
-            Object[] args = new Object[ctx.arguments().expression().size()];
-            for (int i = 0; i < ctx.arguments().expression().size(); i++) {
-                args[i] = visit(ctx.arguments().expression(i));
+        if (ctx.getChildCount() == 1){ //es una llamada call que termina en una primaria (alguna declaracion posiblemente )
+            if(ctx.primary().array() != null) { // ver en caso de una declaracion de array
+                return visit(ctx.primary().array());
+            }else {
+                return visit(ctx.primary());
             }
-
-            // Llamar a la función con los argumentos
-            return callFunction(function, args);
+        }else{
         }
-
-        System.err.println("Error: Función no definida " + functionName);
         return null;
     }
 
-    // Maneja la ejecución de una función
-    private Object callFunction(CompiScriptParser.FunctionContext functionCtx, Object[] args) {
-        // Crear un nuevo entorno local para las variables de la función
-        localVariables = new HashMap<>();  // Reiniciar el entorno local
-
-        // Asignar argumentos a las variables correspondientes en el ámbito local
-        for (int i = 0; i < functionCtx.parameters().IDENTIFIER().size(); i++) {
-            String paramName = functionCtx.parameters().IDENTIFIER(i).getText();
-            localVariables.put(paramName, args[i]);
-        }
-
-        // Ejecutar el bloque de la función y capturar posibles retornos
-        Object returnValue = null;
-        for (CompiScriptParser.DeclarationContext declCtx : functionCtx.block().declaration()) {
-            if (declCtx.statement() != null && declCtx.statement().returnStmt() != null) {
-                // Si es una sentencia de retorno, evaluarla y devolver su valor
-                returnValue = visit(declCtx.statement().returnStmt().expression());
-                localVariables = null;  // Limpiar el entorno local después de la ejecución de la función
-                return returnValue;  // Salir inmediatamente al encontrar un retorno
+    //function block
+    @Override
+    public Object visitBlock(CompiScriptParser.BlockContext ctx) {
+        // Generate a new context
+        String newScope;
+        if (!CurrClasName.isEmpty()) {
+            if (!CurrFuncName.isEmpty()) {
+                newScope = CurrClasName + "." + CurrFuncName;
             } else {
-                visit(declCtx);  // Visitar otras declaraciones
+                newScope = CurrClasName;
             }
-        }
-
-        // Limpiar el entorno local después de la ejecución de la función
-        localVariables = null;
-        return returnValue;
-    }
-
-    // Visita la sentencia print
-    @Override
-    public Object visitPrintStmt(CompiScriptParser.PrintStmtContext ctx) {
-        // Evalúa la expresión y la imprime
-        Object value = visit(ctx.expression());
-        System.out.println(value);
-        return null;
-    }
-
-    // Visita una expresión de suma
-
-    @Override
-    public Object visitTerm(CompiScriptParser.TermContext ctx) {
-        if (ctx.getChildCount() == 3) { // Ej. a + b, a - b
-            Object left = visit(ctx.factor(0));
-            Object right = visit(ctx.factor(1));
-
-            // Asegurar que ambos lados sean números
-            if (left instanceof Double && right instanceof Double) {
-                String operator = ctx.getChild(1).getText();
-                switch (operator) {
-                    case "+":
-                        return (Double) left + (Double) right;
-                    case "-":
-                        return (Double) left - (Double) right;
-                }
-            }
-        }
-        return visit(ctx.factor(0)); // Retorna el valor de la única expresión si no hay operador binario
-    }
-    @Override
-    public Object visitFactor(CompiScriptParser.FactorContext ctx) {
-        if (ctx.getChildCount() == 3) { // Ej. a * b, a / b
-            Object left = visit(ctx.unary(0));
-            Object right = visit(ctx.unary(1));
-
-            // Asegurar que ambos lados sean números
-            if (left instanceof Double && right instanceof Double) {
-                String operator = ctx.getChild(1).getText();
-                switch (operator) {
-                    case "*":
-                        return (Double) left * (Double) right;
-                    case "/":
-                        return (Double) left / (Double) right;
-                }
-            }
-        }
-        return visit(ctx.unary(0)); // Retorna el valor de la única expresión si no hay operador binario
-    }
-    // Maneja valores primarios (números, etc.)
-    @Override
-    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
-        if (ctx.NUMBER() != null) {
-            return Double.valueOf(ctx.NUMBER().getText());
-        } else if (ctx.IDENTIFIER() != null) {
-            // Si es un identificador, busca primero en las variables locales, luego en las globales
-            String varName = ctx.IDENTIFIER().getText();
-            if (localVariables != null && localVariables.containsKey(varName)) {
-                return localVariables.get(varName);
-            } else if (globalVariables.containsKey(varName)) {
-                return globalVariables.get(varName);
-            } else {
-                System.err.println("Error: Variable no definida " + varName);
-            }
-        }
-        return null; // Manejar otros tipos si es necesario
-    }
-
-    // Visita una asignación
-    @Override
-    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx) {
-        // Verificar si la asignación sigue el patrón IDENTIFIER = expression
-        if (ctx.IDENTIFIER() != null) {
-            String varName = ctx.IDENTIFIER().getText();
-            Object value = visit(ctx.expression());  // Procesar la expresión asignada
-
-            // Asignar en el entorno local si existe, de lo contrario en el global
-            if (localVariables != null) {
-                localVariables.put(varName, value);
-            } else {
-                globalVariables.put(varName, value);
-            }
-            return value;
+        } else if (!CurrFuncName.isEmpty()) {
+            newScope = CurrFuncName;
         } else {
-            // Si no es una asignación, manejar la expresión como tal
-            return visit(ctx.logic_or());
+            newScope = "Anon" + AnonCount;
+            AnonCount++;
         }
+
+        // Create new symbol tables for the new scope
+        // Populate new symbol tables from the existing scope
+        Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+
+        // Insert new scope into the symbol table maps
+        scopedDeclaredFunctions.put(newScope, functMap);
+        scopedSymbolTable.put(newScope, symbolMap);
+        scopedDeclaredClasses.put(newScope, classMap);
+
+        // Push the new Scope into the stack
+        ScopesStack.push(newScope);
+
+        // Visit the child nodes
+        Object lastDeclared = null;
+        for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
+            lastDeclared = visit(child);
+        }
+
+        // Pop the Scope after processing
+        ScopesStack.pop();
+
+        return lastDeclared;
     }
+
+    /* Manejo de las clases y sus instancias */
+
+
+    //declaracion de una clase
+    @Override
+    public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
+        String ClassName = ctx.IDENTIFIER().getFirst().toString();
+
+        String Father = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : null;
+        //chekar que no exista ni en el scope ni que sea clase
+        if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(ClassName)) {
+            Map<String,Object> inner = new  HashMap<String, Object>();
+            inner.put("type",new Class());
+            inner.put("scope",ScopesStack.peek());
+            this.CurrClasName = ClassName;
+            if (Father == null) {inner.put("father",null);}
+            else{
+                if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(Father)) {
+                    System.err.println("Error: Cannot inherit from undefined :" + Father);
+                }
+            }
+
+            scopedDeclaredClasses.get(ScopesStack.peek().toString()).put(ClassName, inner);
+            // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
+            for (CompiScriptParser.FunctionContext child : ctx.function()){
+                visit(child);
+            }
+            this.CurrClasName = "";
+        }else{
+            System.err.println("Error: " + ClassName + " was already defined ");
+        }
+        return null;
+    }
+
+    /*
+    * Manejo de Operaciones Lógicas ( ifs,
+    * */
+    //Manejo de assigments
+    @Override
+    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
+        if(ctx.logic_or() != null) {
+            visit(ctx.logic_or());
+        } else if (ctx.call() != null) {
+            if(Objects.equals(ctx.call().getText(), "this") && !CurrClasName.isBlank()){//maybe a this for an Atribute?
+                String attribute = ctx.getChild(2).getText();
+                HashMap<String,Object> attributeMap = new HashMap<>();
+                attributeMap.put("scope",ScopesStack.peek());
+                if (attribute == null) {
+                    System.out.println("Error: Attribute has no NAME");
+                }
+                Object type = visit(ctx.assignment());
+                if(type == null){
+                    attributeMap.put("type",new Undefined());
+                }else{
+                    attributeMap.put("type",type);
+                }
+
+                scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName+"."+attribute, attributeMap);
+            } else if (Objects.equals(ctx.call().getText(), "this") && CurrClasName.isBlank()) {
+                System.out.println("Error: There is no class to define an attribute");
+            } else if(ctx.call() == null){ //symple var asignation
+                String variableName = ctx.IDENTIFIER().getText();
+                Object variableValue = visit(ctx.assignment());
+                if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(variableName)){
+                    scopedSymbolTable.get(ScopesStack.peek()).get(variableName).replace("type",variableValue);
+                }else{
+                    System.err.println("Error: Cannot assign undeclared variable " + variableName);
+                };
+            }
+        }
+        return visitChildren(ctx);
+    }
+
+    //Lógica de los OR
+    @Override
+    public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.logic_and().size() == 1){
+                return visit( ctx.logic_and().getFirst() );
+            }else{
+                for (CompiScriptParser.Logic_andContext child : ctx.logic_and()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
+    //Lógica de los AND
+    @Override
+    public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.equality().size() == 1){
+                return visit( ctx.equality().getFirst() );
+            }else{
+                for (CompiScriptParser.EqualityContext child : ctx.equality()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
+    //logica de la igualdad
+    @Override
+    public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.comparison().size() == 1){
+                return visit( ctx.comparison().getFirst() );
+            }else{
+                for (CompiScriptParser.ComparisonContext child : ctx.comparison()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
+    //lógica de las comparaciones
+    @Override
+    public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.term().size() == 1){
+                return visit( ctx.term().getFirst() );
+            }
+        }
+        return null;
+    }
+
 }
 

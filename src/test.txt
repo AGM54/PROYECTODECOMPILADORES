@@ -1,5 +1,6 @@
-fun resta(a, b) {
-     return a /b;
+class Test{
+    init(a){
+    this.a = 1;
+    }
+    MethodInsideClass(){}
 }
-
-print resta(20, 4);
