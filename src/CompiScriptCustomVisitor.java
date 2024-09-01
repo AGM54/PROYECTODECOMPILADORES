@@ -78,6 +78,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return results;
     }
+
     public void printSymbols() {
         System.out.println("Symbols: ");
         System.out.println("|Name|\t|Scope|\t|Type|\t|Super|\t|Arguments|");
@@ -334,7 +335,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         //check if is not defined or if is not defined on this scope
         if (!scopedSymbolTable.get(ScopesStack.peek().toString()).containsKey(varName)) {
-            CurrClasName = varName;
             HashMap<String,Object> varMap = new HashMap<>();
             if (ctx.expression() != null) {
                 CurrVarDefining = varName;
@@ -635,7 +635,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }else{
                     inner.put("father",Father);
                     //get all the methods from the super class
-                    List<>
                 }
             }
 
@@ -876,8 +875,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         return null;
     }
-
-
 
 }
 

@@ -11,3 +11,4 @@ class Perrito extends Animal{
         super.init(name);
     }
 }
+var doggo = new Perrito("doggo");
