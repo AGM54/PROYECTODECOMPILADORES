@@ -31,10 +31,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     private Map<String, Map<String,Map<String,Object>>>
             scopedSymbolTable = new HashMap<>(){{put("0",new HashMap<>());}};
     //symbol table just for the classes
-    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredClasses = new HashMap<>(){{put("0",new HashMap<>());}};
+    private Map<String, Map<String,Map<String,Object>>>
+            scopedDeclaredClasses = new HashMap<>(){{put("0",new HashMap<>());}};
     // Tabla de símbolos para almacenar funciones
-    private Map<String, Map<String,Map<String,Object>>> scopedDeclaredFunctions = new HashMap<>(){{put("0",new HashMap<>());}};
-    //Flag para el manejo de declaracion de clases
+    private Map<String, Map<String,Map<String,Object>>>
+            scopedDeclaredFunctions = new HashMap<>(){{put("0",new HashMap<>());}};
+    //Flag para el manejo de declaracion de clases , funciones y variables de tipo Instancia o experesiones
     private String CurrClasName = "" ;
     private String CurrVarDefining = "" ;
     private String CurrFuncName = "";
@@ -488,19 +490,19 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         String Father = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : null;
         //chekar que no exista ni en el scope ni que sea clase
-        if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(ClassName)) {
+        if (!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(ClassName)) {
             Map<String,Object> inner = new  HashMap<String, Object>();
             inner.put("type",new Class());
             inner.put("scope",ScopesStack.peek());
             this.CurrClasName = ClassName;
             if (Father == null) {inner.put("father",null);}
             else{
-                if (!scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(Father)) {
+                if (!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(Father)) {
                     System.err.println("Error: Cannot inherit from undefined :" + Father);
                 }
             }
 
-            scopedDeclaredClasses.get(ScopesStack.peek().toString()).put(ClassName, inner);
+            scopedDeclaredClasses.get(ScopesStack.peek()).put(ClassName, inner);
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             for (CompiScriptParser.FunctionContext child : ctx.function()){
                 visit(child);
@@ -513,7 +515,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     }
 
     /*
-    * Manejo de Operaciones Lógicas ( ifs,
+    * Manejo de Operaciones Lógicas
     * */
     //Manejo de assigments
     @Override
@@ -677,6 +679,68 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return variable;
     }
+    @Override
+    public Object visitWhileStmt(CompiScriptParser.WhileStmtContext ctx) {
+        // Visit the expression within the 'while' statement
+        Object exprResult = visit(ctx.expression());
+
+        // Ensure the expression results in a Boolean
+        if (!(exprResult instanceof Boolean)) {
+            System.err.println("Error : while conditional -> " + exprResult.getClass().getSimpleName() + " " + exprResult.toString() + " is not boolean order");
+        }
+
+        // Visit the statement to be executed in the loop
+        return visit(ctx.statement());
+    }
+
+    @Override
+    public Object visitForStmt(CompiScriptParser.ForStmtContext ctx) {
+        // Visit the initializer (if present)
+        if (ctx.varDecl() != null) {
+            visit(ctx.varDecl());
+        } else if (ctx.exprStmt() != null) {
+            visit(ctx.exprStmt());
+        }
+
+        // Visit the condition expression (if present)
+        if (ctx.expression(0) != null) {
+            Object exprResult = visit(ctx.expression(0));
+            if (!(exprResult instanceof Boolean)) {
+                System.err.println("Error : For conditional -> " + exprResult.getClass().getSimpleName() + " " + exprResult.toString() + " is not boolean order");
+            }
+        }
+
+        // Visit the increment expression (if present)
+        if (ctx.expression(1) != null) {
+            visit(ctx.expression(1));
+        }
+
+        // Visit the statement to be executed in the loop
+        return visit(ctx.statement());
+    }
+
+    @Override
+    public Object visitIfStmt(CompiScriptParser.IfStmtContext ctx) {
+        // Visit the expression within the 'if' statement
+        Object exprResult = visit(ctx.expression());
+
+        // Ensure the expression results in a Boolean
+        if (!(exprResult instanceof Boolean)) {
+            System.err.println("Error : if conditional -> " + exprResult.getClass().getSimpleName() + " " + exprResult.toString() + " is not boolean order");
+        }
+
+        // Visit the 'then' statement
+        visit(ctx.statement(0));
+
+        // Visit the 'else' statement if it exists
+        if (ctx.statement(1) != null) {
+            visit(ctx.statement(1));
+        }
+
+        return null;
+    }
+
+
 
 }
 
