@@ -386,6 +386,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Guardar en la clase
             if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
                 if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + functionName)){
+                    CurrFuncName = CurrClasName + "." + functionName;
                     functMap.put("type",new Method(){{setCtx(ctx);}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
                     visitChildren(ctx);
@@ -578,7 +579,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         scopedParametersDeclarations.put(newScope, parametersMap);
         // Push the new Scope into the stack
         ScopesStack.push(newScope);
-
         //push the parameters into the scope
         if(!CurrFuncName.isEmpty()){
             List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("params");

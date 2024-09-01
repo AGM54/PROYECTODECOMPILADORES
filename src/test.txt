@@ -1,9 +1,5 @@
-fun myFunct(a){
-    print a+"a";
+class Animal{
+    init(name){
+        this.name = name;
+    }
 }
-fun myDis(a){
-    return fun(d){
-        return d + 1;
-    };
-}
-var a = 0;
