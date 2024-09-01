@@ -23,19 +23,23 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        // Configurar la interfaz de usuario
+
         primaryStage.setTitle("CompiScript Analyzer");
 
         inputArea = new TextArea();
         inputArea.setPromptText("Enter your CompiScript code here...");
+        inputArea.setStyle("-fx-font-family: 'Consolas'; -fx-font-size: 14px;");
 
         outputArea = new TextArea();
         outputArea.setEditable(false);
+        outputArea.setStyle("-fx-font-family: 'Consolas'; -fx-font-size: 14px; -fx-control-inner-background: #f0f0f0; -fx-text-fill: #333333;");
 
         Button analyzeButton = new Button("Analyze");
+        analyzeButton.setStyle("-fx-background-color: #0077cc; -fx-text-fill: white; -fx-font-size: 14px;");
         analyzeButton.setOnAction(e -> analyzeCode());
 
         VBox vbox = new VBox(10, inputArea, analyzeButton, outputArea);
+        vbox.setStyle("-fx-padding: 10; -fx-background-color: #ffffff; -fx-border-color: #cccccc; -fx-border-radius: 8px; -fx-background-radius: 8px;");
         Scene scene = new Scene(vbox, 600, 400);
 
         primaryStage.setScene(scene);
@@ -69,10 +73,9 @@ public class MainApp extends Application {
             System.out.flush();
             System.setOut(old);
 
-            // Imprimir también en la terminal
-            String output = baos.toString();
-            System.out.print(output);   
 
+            String output = baos.toString();
+            System.out.print(output);
 
             outputArea.setText(output);
         }
