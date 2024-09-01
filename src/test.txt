@@ -1,10 +1,9 @@
-var x = 0;
-if(x){
-    print x;
+fun myFunct(a){
+    print a+"a";
 }
-if(!(x<0)){
-    print x;
+fun myDis(a){
+    return fun(d){
+        return d + 1;
+    };
 }
-if(x%2 == 0){
-    print x;
-}
+var a = 0;
