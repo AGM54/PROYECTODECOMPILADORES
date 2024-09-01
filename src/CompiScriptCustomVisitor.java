@@ -481,6 +481,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Manejo de llamadas
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
+        Object returner = null;
         if (ctx.getChildCount() == 1){ //primary call
             if (ctx.primary() != null){
                 if(ctx.primary().array() != null) { // is an array (somehow)
@@ -502,7 +503,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         receivedParams.add(visit(arguments.getChild(i)));
                     }
                 }
-                CurrFuncName = ((Function) primary).getFunName();
+
                 if(requParams!=null && requParams.size() != receivedParams.size()){
                     System.err.println("Error: " +((Function) primary).getFunName() + " requieres " +(requParams==null ? 0 : requParams.size())
                     + " parameters " + receivedParams.size() + " found");
@@ -522,11 +523,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     scopedParametersDeclarations.put(newScope, paramMap);
 
                     // Push the new Scope into the stack
-                    ScopesStack.push(newScope);
+                    //ScopesStack.push(newScope);
                     for(int i = 0 ; i < requParams.size() ; i++) {
                         String paramName = requParams.get(i).toString();
                         Object type = receivedParams.get(i);
-                        scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
+                        scopedParametersDeclarations.get(newScope).put(paramName,
                                 new HashMap<>() {{
                                     put("type", new Param() {{
                                         setTypeInstnce(type);
@@ -534,14 +535,16 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                     put("scope", ScopesStack.peek());
                                 }});
                     }
-                    return visitChildren(ctx);
+                    CurrFuncName = ((Function) primary).getFunName();
+                    returner =  visitChildren(((Function) primary).getCtx());
+                    CurrFuncName = "";
                 }
 
             }
         }
 
 
-        return visitChildren(ctx);
+        return returner;
     }
 
     //visit the arguments
