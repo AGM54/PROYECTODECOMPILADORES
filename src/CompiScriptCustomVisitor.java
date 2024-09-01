@@ -4,10 +4,20 @@ import javax.lang.model.type.DeclaredType;
 import java.util.regex.Pattern;
 import java.util.*;
 
-class Function {} //a function
+class Function {
+    private CompiScriptParser.FunctionContext ctx = null;
+
+    public void setCtx(CompiScriptParser.FunctionContext ctx) {
+        this.ctx = ctx;
+    }
+
+    public CompiScriptParser.FunctionContext getCtx() {
+        return ctx;
+    }
+} //a function
 class Class {} // a class , no rocket science
 class Undefined {} //variables that only have been declared, but no value assigned
-class Method {}  //for methods , functions inside a class
+class Method extends Function{}  //for methods , functions inside a class
 class Unknown {} //for all symbols that were not found
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Stack para los contextos
@@ -59,7 +69,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             table.forEach((id,data)->{
                 if (data.get("scope") == (scope)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
-                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            + data.getOrDefault("type","Undefined").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
                             data.getOrDefault("params", "")
                     );
                 }
@@ -93,7 +103,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //manejo de tipos primarios
     @Override
     public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
-
         if (ctx.NUMBER() != null) {
             if (ctx.NUMBER().getText().contains(".")) {
                 return Double.parseDouble(ctx.NUMBER().getText()); // Floating point number
@@ -298,9 +307,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             functMap.put("scope", ScopesStack.peek());
         }
         functMap.put("returns",null);
+        functMap.put("ctx",ctx);
         if (CurrClasName.isEmpty()){
             // Guarda la función en la tabla de funciones
-            functMap.put("type",new Function());
+            functMap.put("type",new Function(){{setCtx(ctx);}});
             if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
                 scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
             }else{
@@ -310,7 +320,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Guardar en la clase
             if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
                 if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + functionName)){
-                    functMap.put("type",new Method());
+                    functMap.put("type",new Method(){{setCtx(ctx);}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
                 }else{
                     System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
@@ -369,14 +379,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
 
         // Create new symbol tables for the new scope
-        Map<String, Map<String, Object>> functMap = new HashMap<>();
-        Map<String, Map<String, Object>> symbolMap = new HashMap<>();
-        Map<String, Map<String, Object>> classMap = new HashMap<>();
-
         // Populate new symbol tables from the existing scope
-        functMap.putAll(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-        symbolMap.putAll(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-        classMap.putAll(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
 
         // Insert new scope into the symbol table maps
         scopedDeclaredFunctions.put(newScope, functMap);
@@ -397,7 +403,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         return lastDeclared;
     }
-
 
     /* Manejo de las clases y sus instancias */
 
@@ -436,12 +441,94 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     /*
     * Manejo de Operaciones Lógicas ( ifs,
     * */
+    //Manejo de assigments
+    @Override
+    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
+        if(ctx.logic_or() != null) {
+            visit(ctx.logic_or());
+        } else if (ctx.call() != null) {
+            if(Objects.equals(ctx.call().getText(), "this") && !CurrClasName.isBlank()){//maybe a this for an Atribute?
+                String attribute = ctx.getChild(2).getText();
+                HashMap<String,Object> attributeMap = new HashMap<>();
+                attributeMap.put("scope",ScopesStack.peek());
+                if (attribute == null) {
+                    System.out.println("Error: Attribute has no NAME");
+                }
+                Object type = visit(ctx.assignment());
+                if(type == null){
+                    attributeMap.put("type",new Undefined());
+                }else{
+                    attributeMap.put("type",type);
+                }
+
+                scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName+"."+attribute, attributeMap);
+            } else if (Objects.equals(ctx.call().getText(), "this") && CurrClasName.isBlank()) {
+                System.out.println("Error: There is no class to define an attribute");
+            } else if(ctx.call() == null){ //symple var asignation
+                String variableName = ctx.IDENTIFIER().getText();
+                Object variableValue = visit(ctx.assignment());
+                if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(variableName)){
+                    scopedSymbolTable.get(ScopesStack.peek()).get(variableName).replace("type",variableValue);
+                }else{
+                    System.err.println("Error: Cannot assign undeclared variable " + variableName);
+                };
+            }
+        }
+        return visitChildren(ctx);
+    }
 
     //Lógica de los OR
-
+    @Override
+    public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.logic_and().size() == 1){
+                return visit( ctx.logic_and().getFirst() );
+            }else{
+                for (CompiScriptParser.Logic_andContext child : ctx.logic_and()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
     //Lógica de los AND
-
+    @Override
+    public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.equality().size() == 1){
+                return visit( ctx.equality().getFirst() );
+            }else{
+                for (CompiScriptParser.EqualityContext child : ctx.equality()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
+    //logica de la igualdad
+    @Override
+    public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.comparison().size() == 1){
+                return visit( ctx.comparison().getFirst() );
+            }else{
+                for (CompiScriptParser.ComparisonContext child : ctx.comparison()) {
+                    return visit(child);
+                }
+            }
+        }
+        return null;
+    }
     //lógica de las comparaciones
+    @Override
+    public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.term().size() == 1){
+                return visit( ctx.term().getFirst() );
+            }
+        }
+        return null;
+    }
 
 }
 
