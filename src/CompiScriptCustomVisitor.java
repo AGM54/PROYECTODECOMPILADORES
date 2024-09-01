@@ -6,6 +6,13 @@ import java.util.regex.Pattern;
 import java.util.*;
 
 class Function {
+    private  String funName;
+    public Function(String funName){
+        this.funName = funName;
+    }
+    public  String getFunName(){
+        return this.funName;
+    }
     private CompiScriptParser.FunctionContext ctx = null;
 
     public void setCtx(CompiScriptParser.FunctionContext ctx) {
@@ -15,11 +22,22 @@ class Function {
     public CompiScriptParser.FunctionContext getCtx() {
         return ctx;
     }
+
 } //a function
 class Class {} // a class , no rocket science
-class Instance{}
+class Instance{
+    private String clasName;
+    Instance(String classname){this.clasName = classname;}
+    public String getClasName() {
+        return clasName;
+    }
+}
 class Undefined {} //variables that only have been declared, but no value assigned
-class Method extends Function{}  //for methods , functions inside a class
+class Method extends Function{
+    public Method(String functionName) {
+        super(functionName);
+    }
+}  //for methods , functions inside a class
 class Unknown {} //for all symbols that were not found
 class ThisDirective{}
 class SuperConstructor {}
@@ -86,7 +104,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             table.forEach((id,data)->{
                 if (data.get("scope") == (scope)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
-                            + data.getOrDefault("type","Undefined").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            + data.getOrDefault("type","") + "|" + data.getOrDefault("father", "") + "|" +
                             data.getOrDefault("params", "")
                     );
                 }
@@ -264,6 +282,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return result;
     }
+
     //modulo, multiplicacion, division (factor)
     @Override
     public Object visitFactor(CompiScriptParser.FactorContext ctx) {
@@ -374,10 +393,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         functMap.put("ctx",ctx);
         if (CurrClasName.isEmpty()){
             // Guarda la función en la tabla de funciones
-            functMap.put("type",new Function(){{setCtx(ctx);}});
+            functMap.put("type",new Function(functionName){{setCtx(ctx);}});
             if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
                 scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
-                visitChildren(ctx);
+                //visitChildren(ctx);
                 CurrFuncName = "";
             }else{
                 System.err.println("Error: Function already defined" + functionName);
@@ -387,9 +406,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
                 if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + functionName)){
                     CurrFuncName = CurrClasName + "." + functionName;
-                    functMap.put("type",new Method(){{setCtx(ctx);}});
+                    functMap.put("type",new Method(functionName){{setCtx(ctx);}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
-                    visitChildren(ctx);
+                    //visitChildren(ctx);
                     CurrFuncName = "";
                 }else{
                     System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
@@ -402,6 +421,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return null;
     }
+
     //anonimous function block
     @Override
     public Object visitFunAnon(CompiScriptParser.FunAnonContext ctx){
@@ -419,7 +439,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         functMap.put("ctx",ctx);
         if (CurrClasName.isEmpty()){
             // Guarda la función en la tabla de funciones
-            functMap.put("type",new Function());
+            functMap.put("type",new Function(CurrFuncName));
             if(!scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(CurrFuncName)) {
                 scopedDeclaredFunctions.get(ScopesStack.peek()).put(CurrFuncName, functMap);
                 visitChildren(ctx);
@@ -431,7 +451,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Guardar en la clase
             if (scopedDeclaredClasses.get(ScopesStack.peek().toString()).containsKey(CurrClasName)) {
                 if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(CurrClasName + "." + CurrFuncName)){
-                    functMap.put("type",new Method(){{}});
+                    functMap.put("type",new Method(CurrFuncName){{}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + CurrFuncName,functMap);;
                     visitChildren(ctx);
                     CurrFuncName = "";
@@ -471,18 +491,59 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
 
         }else if(ctx.primary() != null){
-            if (ctx.primary().instantiation() != null){
-                if(ctx.primary().instantiation().getChildCount()> 0) { //create an instance
-                    System.out.println("is an instance");
-                    String nombreClase = ctx.primary().instantiation().getChild(1).getText();
-                    System.out.println(nombreClase);
+            Object primary = visit(ctx.primary());
+
+            if(primary instanceof  Function){
+                List<String> requParams = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(((Function) primary).getFunName()).get("params");
+                List<Object> receivedParams = new ArrayList<>();
+                if(ctx.arguments() != null){
+                    CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                    for(int i= 0; i <arguments.getChildCount() ; i+=2){
+                        receivedParams.add(visit(arguments.getChild(i)));
+                    }
                 }
+                CurrFuncName = ((Function) primary).getFunName();
+                if(requParams!=null && requParams.size() != receivedParams.size()){
+                    System.err.println("Error: " +((Function) primary).getFunName() + " requieres " +(requParams==null ? 0 : requParams.size())
+                    + " parameters " + receivedParams.size() + " found");
+                }
+                if(requParams != null){
+                    String newScope = ((Function) primary).getFunName();
+                    // Create new symbol tables for the new scope
+                    // Populate new symbol tables from the existing scope
+                    Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    // Insert new scope into the symbol table maps
+                    scopedDeclaredFunctions.put(newScope, functMap);
+                    scopedSymbolTable.put(newScope, symbolMap);
+                    scopedDeclaredClasses.put(newScope, classMap);
+                    scopedParametersDeclarations.put(newScope, paramMap);
+
+                    // Push the new Scope into the stack
+                    ScopesStack.push(newScope);
+                    for(int i = 0 ; i < requParams.size() ; i++) {
+                        String paramName = requParams.get(i).toString();
+                        Object type = receivedParams.get(i);
+                        scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
+                                new HashMap<>() {{
+                                    put("type", new Param() {{
+                                        setTypeInstnce(type);
+                                    }});
+                                    put("scope", ScopesStack.peek());
+                                }});
+                    }
+                    return visitChildren(ctx);
+                }
+
             }
         }
 
 
-        return null;
+        return visitChildren(ctx);
     }
+
     //visit the arguments
     @Override
     public Object visitArguments(CompiScriptParser.ArgumentsContext ctx){
@@ -516,7 +577,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             if(args != null) {
                 List<Object> params = new ArrayList<>((Collection) args);
                 List<CompiScriptParser.ExpressionContext> received = (List<CompiScriptParser.ExpressionContext>) visit(ctx.arguments());
-                System.out.println(received);
                 if(ctx.arguments() == null || params.size() !=  received.size()) {
                     System.err.println("Error : " + ctx.IDENTIFIER().getText() + " expected "
                             + params.size()  + " arguments " + (ctx.arguments() == null ? " none" : received.size())
@@ -546,9 +606,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        return new Instance();
+        return new Instance(ctx.IDENTIFIER().getText());
     }
-
 
     //function block
     @Override
@@ -585,36 +644,37 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         // Push the new Scope into the stack
         ScopesStack.push(newScope);
         //push the parameters into the scope
-        if(!CurrFuncName.isEmpty()){
+        if (!CurrFuncName.isEmpty()) {
             List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).getOrDefault("params", new ArrayList<String>());
             for (String param : Params) {
-                if(!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)){
+                if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)) {
                     scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
-                            new HashMap<>(){{
-                                put("type",new Param());
-                                put("scope",ScopesStack.peek());
+                            new HashMap<>() {{
+                                put("type", new Param());
+                                put("scope", ScopesStack.peek());
                             }});
-                }else{
-                    System.err.println("Error : Parameter " + param +" is already declared ");
+                } else {
+                    Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
+                    if (paramI.getTypeInstnce() == null) {
+                        System.err.println("Error : Parameter " + param + " is already declared ");
+
+                    }
                 }
             }
         }
 
+            // Visit the child nodes
+            Object lastDeclared = null;
+            for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
+                lastDeclared = visit(child);
+            }
 
-        // Visit the child nodes
-        Object lastDeclared = null;
-        for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
-            lastDeclared = visit(child);
-        }
+            // Pop the Scope after processing
+            ScopesStack.pop();
 
-        // Pop the Scope after processing
-        ScopesStack.pop();
-
-        return lastDeclared;
+            return lastDeclared;
     }
-
     /* Manejo de las clases y sus instancias */
-
 
     //declaracion de una clase
     @Override
@@ -719,6 +779,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return variable;
     }
+
     //Lógica de los AND
     @Override
     public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
@@ -749,6 +810,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return variable;
     }
+
     //logica de la igualdad
     @Override
     public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
@@ -786,6 +848,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return variable;
     }
+
     //lógica de las comparaciones
     @Override
     public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
@@ -815,6 +878,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return variable;
     }
+
+    //while statement
     @Override
     public Object visitWhileStmt(CompiScriptParser.WhileStmtContext ctx) {
         // Visit the expression within the 'while' statement
@@ -829,6 +894,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return visit(ctx.statement());
     }
 
+    //for statement
     @Override
     public Object visitForStmt(CompiScriptParser.ForStmtContext ctx) {
         // Visit the initializer (if present)
@@ -855,6 +921,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return visit(ctx.statement());
     }
 
+    //if statement
     @Override
     public Object visitIfStmt(CompiScriptParser.IfStmtContext ctx) {
         // Visit the expression within the 'if' statement

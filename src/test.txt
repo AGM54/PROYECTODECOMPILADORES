@@ -1,14 +1,4 @@
-class Animal{
-    init(name){
-        this.name = name;
-    }
-    mover(){
-        return "moved";
-    }
+fun sumar(a,b){
+    return a+b;
 }
-class Perrito extends Animal{
-    init(name){
-        super.init(name);
-    }
-}
-var doggo = new Perrito("doggo");
+var x = sumar(1,2);
