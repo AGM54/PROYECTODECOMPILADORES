@@ -1,4 +1,5 @@
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
 import javax.lang.model.type.DeclaredType;
 import java.util.regex.Pattern;
@@ -184,9 +185,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     // Visita una expresión de suma o resta (term)
     @Override
     public Object visitTerm(CompiScriptParser.TermContext ctx) {
-        System.out.println(ScopesStack.peek());
         Object result = visit(ctx.factor(0));
-
         for (int i = 1; i < ctx.factor().size(); i++) {
             Object nextValue = visit(ctx.factor(i));
             String operator = ctx.getChild(2 * i - 1).getText();
@@ -489,7 +488,23 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        return null;
+
+        Object variable = visit(ctx.logic_and(0)); // Start with the first logic_and child
+
+        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'or' and its subsequent logic_and
+            String operator = ctx.getChild(i).getText(); // Get the operator ('or')
+
+            Object variableTemp = visit(ctx.getChild(i + 1)); // Visit the next logic_and child
+
+            if (variableTemp instanceof Boolean && variable instanceof Boolean) {
+                if ("or".equals(operator)) {
+                    variable = (Boolean) variable || (Boolean) variableTemp;
+                }
+            } else {
+                System.err.println("Semantic Error: Comparisons do not generate boolean values for logical operations.");
+            }
+        }
+        return variable;
     }
     //Lógica de los AND
     @Override
@@ -503,7 +518,23 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        return null;
+
+        Object variable = visit(ctx.equality(0)); // Start with the first equality child
+
+        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'and' and its subsequent equality
+            String operator = ctx.getChild(i).getText(); // Get the operator ('and')
+
+            Object variableTemp = visit(ctx.getChild(i + 1)); // Visit the next equality child
+
+            if (variableTemp instanceof Boolean && variable instanceof Boolean) {
+                if ("and".equals(operator)) {
+                    variable = (Boolean) variable && (Boolean) variableTemp;
+                }
+            } else {
+                System.err.println("Semantic Error: Comparisons do not generate boolean values for logical operations.");
+            }
+        }
+        return variable;
     }
     //logica de la igualdad
     @Override
@@ -517,7 +548,30 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        return null;
+        // Start by visiting the first comparison child
+        Object variable = visit(ctx.comparison(0));
+        String currentOperation = "";
+
+        // Iterate through remaining children to evaluate equality operations
+        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skipping by 2: get operator then the next comparison
+            currentOperation = ctx.getChild(i).getText(); // '!=' or '=='
+            Object variableTemp = visit(ctx.getChild(i + 1));
+
+            // Check if both are of the same type or if the operation is valid
+            if (variableTemp instanceof  Undefined){
+                System.err.println("Semantic Error: Invalid operation; cannot compare an undefined");
+            }
+            if (variableTemp instanceof Boolean && variable instanceof Boolean) {
+                variable = Boolean.TRUE;
+            } else if ("!=".equals(currentOperation) || "==".equals(currentOperation)) {
+                variable = Boolean.TRUE;
+            } else if (currentOperation.isEmpty() && variable == null) {
+                variable = variableTemp;
+            } else if (!currentOperation.isEmpty()) {
+               System.err.println("Semantic Error: Invalid operation; cannot compare different types.");
+            }
+        }
+        return variable;
     }
     //lógica de las comparaciones
     @Override
@@ -527,7 +581,26 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 return visit( ctx.term().getFirst() );
             }
         }
-        return null;
+        String currentOperation = "";
+        Object variable = visit(ctx.getChild(0));
+        for (int i = 1; i < ctx.getChildCount(); i+=2) {
+            Object variableTemp = visit(ctx.getChild(i+1));
+            currentOperation = ctx.getChild(i).getText();
+            // Determine if the current child is an operator or a value
+            if (variableTemp instanceof  Undefined){
+                System.err.println("Semantic Error: Invalid operation; cannot compare an undefined");
+            }
+            if (variableTemp.getClass() ==variable.getClass() &&
+                    (">".equals(currentOperation) || "<".equals(currentOperation) ||
+                    ">=".equals(currentOperation) || "<=".equals(currentOperation))) {
+                variable = Boolean.TRUE;
+            } else if ("!=".equals(currentOperation) || "==".equals(currentOperation)) {
+                variable = Boolean.TRUE;
+            } else if (!currentOperation.isEmpty()) {
+                System.err.println("Semantic Error: Invalid operation; cannot compare different types.");
+            }
+        }
+        return variable;
     }
 
 }

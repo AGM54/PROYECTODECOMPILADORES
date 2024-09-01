@@ -4,3 +4,10 @@ class Test{
     }
     MethodInsideClass(){}
 }
+var x;
+var bool = 1 != 2;
+bool = 1 > 2;
+bool = 1 == 2;
+bool = 1 <= 2;
+bool = 1 >= 2;
+bool = 1 >= x;
