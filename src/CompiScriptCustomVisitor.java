@@ -470,12 +470,17 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
 
-        }else if (ctx.primary().instantiation().getChildCount()> 0){ //create an instance
-            System.out.println("is an instance");
-            String nombreClase = ctx.primary().instantiation().getChild(1).getText();
-            System.out.println(nombreClase);
-
+        }else if(ctx.primary() != null){
+            if (ctx.primary().instantiation() != null){
+                if(ctx.primary().instantiation().getChildCount()> 0) { //create an instance
+                    System.out.println("is an instance");
+                    String nombreClase = ctx.primary().instantiation().getChild(1).getText();
+                    System.out.println(nombreClase);
+                }
+            }
         }
+
+
         return null;
     }
     //visit the arguments
@@ -581,7 +586,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         ScopesStack.push(newScope);
         //push the parameters into the scope
         if(!CurrFuncName.isEmpty()){
-            List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("params");
+            List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).getOrDefault("params", new ArrayList<String>());
             for (String param : Params) {
                 if(!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)){
                     scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
@@ -627,6 +632,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             else{
                 if (!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(Father)) {
                     System.err.println("Error: Cannot inherit from undefined :" + Father);
+                }else{
+                    inner.put("father",Father);
+                    //get all the methods from the super class
+                    List<>
                 }
             }
 

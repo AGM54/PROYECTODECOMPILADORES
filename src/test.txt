@@ -2,4 +2,12 @@ class Animal{
     init(name){
         this.name = name;
     }
+    mover(){
+        return "moved";
+    }
+}
+class Perrito extends Animal{
+    init(name){
+        super.init(name);
+    }
 }
