@@ -1,3 +1,4 @@
+import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
@@ -7,6 +8,7 @@ import java.util.*;
 
 class Function {
     private  String funName;
+    private Boolean isRecursive = false;
     public Function(String funName){
         this.funName = funName;
     }
@@ -23,6 +25,12 @@ class Function {
         return ctx;
     }
 
+    public void setIsRecursive(){
+        isRecursive = true;
+    }
+    public Boolean getIsRecursive(){
+        return isRecursive;
+    }
 } //a function
 class Class {} // a class , no rocket science
 class Instance{
@@ -44,7 +52,15 @@ class Method extends Function{
 }  //for methods , functions inside a class
 class Unknown {} //for all symbols that were not found
 class ThisDirective{}
-class SuperConstructor {}
+class SuperConstructor {
+    private String Identifier;
+    public SuperConstructor(String Identifier){
+        this.Identifier = Identifier;
+    }
+    public String getIdentifier(){
+        return this.Identifier;
+    }
+}
 class Param{
     private Object typeInstnce = null;
 
@@ -73,6 +89,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     private String CurrVarDefining = "" ;
     private String CurrFuncName = "";
     private Integer AnonCount = 0; //for all blocks that are on Anon fucntion
+    private Boolean VisitingSuper = false; // to visit and retrieve methods and attributes from super class to avoid semantic exceptions of already defined
+    private String currCallName = "" ; // call made
+    
     // Tabla de símbolos para almacenar variables globales
 
     // get a list of all the methods of a class  ( useful for heriachy and inherance )
@@ -92,7 +111,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     public void printSymbols() {
         System.out.println("Symbols: ");
         System.out.println("|Name|\t|Scope|\t|Type|\t|Super|\t|Arguments|");
+        System.out.println("Declared Symbols : ");
         scopedSymbolTable.forEach((scope,table)->{
+            System.out.println("SCOPE :" + scope);
             table.forEach((id,data)->{
                 System.out.println("|" + id + "|" + data.get("scope") + "|"
                         + data.getOrDefault("type","").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
@@ -100,7 +121,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 );
             });
         });
+        System.out.println("Declared Classes : ");
         scopedDeclaredClasses.forEach((scope,table)->{
+            System.out.println("SCOPE :" + scope);
             table.forEach((id,data)->{
                 System.out.println("|" + id + "|" + data.get("scope") + "|"
                         + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
@@ -108,7 +131,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 );
             });
         });
-        scopedDeclaredFunctions.forEach((s,table)->{
+        System.out.println("Declared functions :");
+        scopedDeclaredFunctions.forEach((scope,table)->{
+            System.out.println("SCOPE :" + scope);
             table.forEach((id,data)->{
                 System.out.println("|" + id + "|" + data.get("scope") + "|"
                         + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father","") + "|" +
@@ -116,7 +141,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 );
             });
         });
-        scopedParametersDeclarations.forEach((s,table)->{
+        System.out.println("Declared parameters :");
+        scopedParametersDeclarations.forEach((scope,table)->{
+            System.out.println("SCOPE :" + scope);
             table.forEach((id,data)->{
                 System.out.println("|" + id + "|" + data.get("scope") + "|"
                         + (((Param)data.get("type")).getTypeInstnce() == null? data.get("type").getClass().getSimpleName():((Param)data.get("type")).getTypeInstnce().getClass().getSimpleName())
@@ -129,7 +156,25 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     /*
     Sección de manejo de valores atómicos o primarios
      */
-
+    // Helper method to convert any object to a String
+    private String convertToString(Object obj) {
+        if (obj instanceof Character) {
+            return String.valueOf((Character) obj);
+        } else if (obj instanceof Number) {
+            return String.valueOf((Number) obj);
+        } else if (obj instanceof Boolean) {
+            return String.valueOf((Boolean) obj);
+        }  else if (obj instanceof String) {
+            // Fallback for any other type including String
+            return String.valueOf(obj);
+        }else if (obj instanceof String) {
+            return  "";
+        }
+        else{
+            System.err.println("Error : cannot cast into string a non primitive value, received " + obj.getClass().getSimpleName());
+            return null;
+        }
+    }
     //manejo de tipos primarios
     @Override
     public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
@@ -176,6 +221,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             return visit(ctx.array());
         } else if (ctx.instantiation() != null) {
             return visit(ctx.instantiation());
+        } else if(ctx.getText().equals("this")){
+            return new ThisDirective();
+        } else if (ctx.superCall() != null){
+            return new SuperConstructor(ctx.superCall().getChild(2).getText());
         }
         return visitChildren(ctx);
     }
@@ -220,7 +269,13 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Object result = visit(ctx.factor(0));
 
         for (int i = 1; i < ctx.factor().size(); i++) {
+
             Object nextValue = visit(ctx.factor(i));
+            //if somehow both are params using default Int
+            if (result instanceof Param && nextValue instanceof Param) {
+                result = 0;
+                nextValue = 0;
+            }
             if (nextValue instanceof Param) {
                 Object innerType = (Param) ((Param) nextValue).getTypeInstnce();
                 if(innerType == null) {
@@ -240,6 +295,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     result = innerType;
                 }
             }
+
             if (operator.equals("+")) {
                 if (result instanceof Number && nextValue instanceof Number) {
                     if (result instanceof Double || nextValue instanceof Double) { // any with double = a double no matter is its int + double
@@ -247,8 +303,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     } else {
                         result = ((Number) result).intValue() + ((Number) nextValue).intValue();
                     }
-                } else if (result instanceof String && nextValue instanceof String) {
-                    result = (String) result + (String) nextValue; // String concatenation
+                } else if (result instanceof String || nextValue instanceof String) {
+                    // Safely convert to String, handling null values
+                    String resultString = (result == null) ? "null" : convertToString(result);
+                    String nextValueString = (nextValue == null) ? "null" : convertToString(nextValue);
+
+                    // Perform String concatenation
+                    result = resultString + nextValueString;
+
                 } else {
                     System.err.println("Operands must be both numbers or both strings for '+' operation. , found: "+ result.getClass().getSimpleName() + " , " + nextValue.getClass().getSimpleName());
                 }
@@ -264,7 +326,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        return result;
+        return result instanceof  Param ? 0 : result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
     }
 
     //modulo, multiplicacion, division (factor)
@@ -274,6 +336,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         for (int i = 1; i < ctx.unary().size(); i++) {
             Object nextValue = visit(ctx.unary(i));
+            //if somehow both are params using default Int
+            if (result instanceof Param && nextValue instanceof Param) {
+                result = 0;
+                nextValue = 0;
+            }
             if (nextValue instanceof Param) {
                 Object innerType = (Param) ((Param) nextValue).getTypeInstnce();
                 if(innerType == null) {
@@ -324,7 +391,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
         }
 
-        return result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
+        return result instanceof  Param ? 0 : result; //siempre se regresa el unario de no ser que no hayan más , caso opuesto dictamina el return type en estas operaciones
     }
 
     /*Manejo de Variables*/
@@ -383,12 +450,11 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             // Guarda la función en la tabla de funciones
             functMap.put("type",new Function(functionName){{setCtx(ctx);}});
             if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
-
                 scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
-                CurrFuncName = "";
-
             }else{
-                System.err.println("Error: Function already defined" + functionName);
+                if(!VisitingSuper) {
+                    System.err.println("Error: Function already defined " + functionName);
+                }
             }
         }else{
             // Guardar en la clase
@@ -397,47 +463,93 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     CurrFuncName = CurrClasName + "." + functionName;
                     functMap.put("type",new Method(functionName){{setCtx(ctx);}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
-
-                    CurrFuncName = "";
                 }else{
-                    System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
+                    if(!VisitingSuper) {
+                        System.err.println("Error: Method already defined: " + CurrClasName + "." + functionName);
+                    }
                 }
-
             } else {
                 // Handle the case where CurrClasName is null or does not exist in declaredClasses
                 System.err.println("Error: " + CurrClasName + " not found in declaredClasses.");
             }
-            // Populate new symbol tables from the existing scope
-            Map<String, Map<String, Object>> functsMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-            Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-            Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-            Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-            // Insert new scope into the symbol table maps
-            String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
-            scopedDeclaredFunctions.put(newScope, functsMap);
-            scopedSymbolTable.put(newScope, symbolMap);
-            scopedDeclaredClasses.put(newScope, classMap);
-            scopedParametersDeclarations.put(newScope, paramMap);
+        }
+        // Populate new symbol tables from the existing scope
+        Map<String, Map<String, Object>> functsMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        // Insert new scope into the symbol table maps
+        String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        scopedDeclaredFunctions.put(newScope, functsMap);
+        scopedSymbolTable.put(newScope, symbolMap);
+        scopedDeclaredClasses.put(newScope, classMap);
+        scopedParametersDeclarations.put(newScope, paramMap);
 
-            // Push the new Scope into the stack
-            ScopesStack.push(newScope);
-            //push the parameters into the scope
-            for (String param : (List<String>) functMap.get("params")) {
-                if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)) {
-                    scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
-                            new HashMap<>() {{
-                                put("type", new Param());
-                                put("scope", ScopesStack.peek());
-                            }});
-                } else {
-                    Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
-                    if (paramI.getTypeInstnce() == null) {
+        // Push the new Scope into the stack
+        ScopesStack.push(newScope);
+        //push the parameters into the scope
+        for (String param : (List<String>) functMap.get("params")) {
+            if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)) {
+                scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
+                        new HashMap<>() {{
+                            put("type", new Param());
+                            put("scope", ScopesStack.peek());
+                        }});
+            } else {
+                Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
+                if (paramI.getTypeInstnce() == null) {
+                    if(!VisitingSuper) {
                         System.err.println("Error : Parameter " + param + " is already declared ");
                     }
                 }
             }
-            visitChildren(ctx);
-            ScopesStack.pop();
+        }
+        visitChildren(ctx);
+        CurrFuncName = "";
+        // Pop the Scope after processing
+        String lastScope = ScopesStack.pop();
+        //if its inside a var declaration or a class declaration recover all the declared stuff and bring back
+        if(!CurrClasName.isBlank()) {
+            List<Map<String, Map<String, Object>>> lastDeclaredSymbols = findFromOnTable(CurrClasName + '.', scopedSymbolTable, lastScope);
+            for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredSymbols) {
+                for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                    String key = entry.getKey(); // Extract the key (String)
+                    Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                    // Insert into the scoped symbol table
+                    value.put("scope", ScopesStack.peek());
+                    scopedSymbolTable.get(ScopesStack.peek()).put(key, value);
+                }
+            }
+            List<Map<String, Map<String, Object>>> lastDeclaredFunctions = findFromOnTable(CurrClasName + '.', scopedDeclaredFunctions, lastScope);
+            for (Map<String, Map<String, Object>> lastDeclaredFun : lastDeclaredFunctions) {
+                for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredFun.entrySet()) {
+                    String key = entry.getKey(); // Extract the key (String)
+                    Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                    // Insert into the scoped symbol table
+                    value.put("scope", ScopesStack.peek());
+                    scopedDeclaredFunctions.get(ScopesStack.peek()).put(key, value);
+                }
+            }
+            List<Map<String, Map<String, Object>>> lasDeclaredParams = findFromOnTable(CurrClasName + '.', scopedParametersDeclarations, lastScope);
+            for (Map<String, Map<String, Object>> lastDeclaredSymbol : lasDeclaredParams) {
+                for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                    String key = entry.getKey(); // Extract the key (String)
+                    Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                    // Insert into the scoped symbol table
+                    value.put("scope", ScopesStack.peek());
+                    scopedParametersDeclarations.get(ScopesStack.peek()).put(key, value);
+                }
+            }
+            List<Map<String, Map<String, Object>>> lastDeclaredClasses = findFromOnTable(CurrClasName + '.', scopedDeclaredClasses, lastScope);
+            for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredClasses) {
+                for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                    String key = entry.getKey(); // Extract the key (String)
+                    Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                    // Insert into the scoped symbol table
+                    value.put("scope", ScopesStack.peek());
+                    scopedDeclaredClasses.get(ScopesStack.peek()).put(key, value);
+                }
+            }
         }
 
         return null;
@@ -514,11 +626,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         }else if(ctx.primary() != null){
             Object primary = visit(ctx.primary());
-
             if(primary instanceof  Function){
+                if(!(CurrFuncName.equals(((Function) primary).getFunName()) || currCallName.equals(((Function) primary).getFunName()))){
+                currCallName = ((Function) primary).getFunName();
                 List<String> requParams = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(((Function) primary).getFunName()).get("params");
                 List<Object> receivedParams = new ArrayList<>();
-                if(ctx.arguments() != null){
+                if(ctx.arguments() != null && !ctx.arguments().isEmpty()){
                     CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
                     for(int i= 0; i <arguments.getChildCount() ; i+=2){
                         receivedParams.add(visit(arguments.getChild(i)));
@@ -529,7 +642,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     System.err.println("Error: " +((Function) primary).getFunName() + " requieres " +(requParams==null ? 0 : requParams.size())
                             + " parameters " + receivedParams.size() + " found");
                 }
-                if(requParams != null){
+                if(requParams != null ) { //avoid calling recursively because a loop
 
                     // Create new symbol tables for the new scope
                     // Populate new symbol tables from the existing scope
@@ -538,36 +651,94 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     // Insert new scope into the symbol table maps
-                    String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+                    String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
                     scopedDeclaredFunctions.put(newScope, functMap);
                     scopedSymbolTable.put(newScope, symbolMap);
                     scopedDeclaredClasses.put(newScope, classMap);
                     scopedParametersDeclarations.put(newScope, paramMap);
-
                     // Push the new Scope into the stack
                     ScopesStack.push(newScope);
                     //push the parameters into the scope
-                    for (int i = 0 ; i < requParams.size() ; i++) {
+                    for (int i = 0; i < requParams.size(); i++) {
                         String paramName = requParams.get(i).toString();
                         Object type = receivedParams.get(i);
                         if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(paramName)) {
                             scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
                                     new HashMap<>() {{
-                                        put("type", new Param(){{setTypeInstnce(type);}});
+                                        put("type", new Param() {{
+                                            setTypeInstnce(type);
+                                        }});
                                         put("scope", ScopesStack.peek());
                                     }});
                         } else {
                             Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
-                            if (paramI.getTypeInstnce() == null) {
+                            if (paramI.getTypeInstnce() == null && currCallName.isEmpty()) {
                                 System.err.println("Error : Parameter " + paramName + " is already declared ");
                             }
                         }
                     }
-                    returner =  visitChildren(((Function) primary).getCtx());
-                    ScopesStack.pop();}
+                    returner = visitChildren(((Function) primary).getCtx());
+                    ScopesStack.pop();
+                    currCallName = "";
+                }
+                } if (CurrFuncName.equals(((Function) primary).getFunName()) || (currCallName.equals(((Function) primary).getFunName()))){
+                    if(!CurrFuncName.isEmpty()){
+                        //add the recursive flag
+                        ( ( Function)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                    }
+                    return new Param();
+                }
+            }
+            if (primary instanceof  ThisDirective){
+                if (CurrClasName.isBlank()){
+                    System.err.println("No class found for usage of 'this' call");
+                }else{
+                    if(ctx.IDENTIFIER() !=null){
+                        if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())){
+                            returner =  scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
+                        }else{
+                            //check on the old scope if it exists
+                            String actual = ScopesStack.pop(); //remove the actual
+                            if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())){
+                                returner =  scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
+                                //if it does, push it also into the actual
+                                Map<String,Object> att = scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText());
+                                ScopesStack.push(actual);
+                                scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText(),att);
+                            }else {
+                                System.err.println("Error : " + CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText() + " is not defined");
+                            }
+                        }
+                    }else{
+                        System.err.println("cant call a blank attribute");
+                    }
+                }
+            }
+            if (primary instanceof  SuperConstructor){
+                if(!CurrClasName.isBlank()){
+                    String Father = (String) scopedDeclaredClasses.get(ScopesStack.peek()).get(CurrClasName).getOrDefault("father","");
+                    if(Father.isBlank()){
+                        System.err.println("Current class : " + CurrClasName + " does not inherit another");
+                    }else if(!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(Father)){
+                        System.err.println("Father class : " + Father + "is not defined");
+                    } else if (!scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(Father + '.' + ((SuperConstructor)primary).getIdentifier())) {
+                        System.err.println("Father super method : " + Father + '.' + ((SuperConstructor)primary).getIdentifier() + "is not defined");
+                    }
+                    //if it does exist, call the method
+                    VisitingSuper = true ;
+                    returner = visit((CompiScriptParser.FunctionContext) scopedDeclaredFunctions.get(ScopesStack.peek()).get(Father + '.' + ((SuperConstructor)primary).getIdentifier()).get("ctx"));
+                    VisitingSuper = false ;
+                }else{
+                    if(CurrVarDefining.isEmpty()) {
+                        System.err.println("There is no current class being defined to call a super class");
+                    }
+                }
+            }
+            if (primary instanceof Instance){
+                Instance ins = (Instance)primary; //contiene info del nombre de la variable que es la instancia
+                Object map = scopedSymbolTable.get(ScopesStack.peek()).get(ins.getLookUpName());
             }
         }
-
 
         return returner;
     }
@@ -594,6 +765,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         if(!scopedDeclaredClasses.get(ScopesStack.peek()).containsKey(ctx.IDENTIFIER().getText())) {
             System.err.println("Error: Cannot make and Instance from undefinded: " + ctx.IDENTIFIER().getText());
         }
+
         //check for an init method
         if(!scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(ctx.IDENTIFIER().getText() +".init")){
             if(ctx.arguments() != null) {
@@ -703,7 +875,22 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
-        String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));;
+        String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        Object lastDeclared = null;
+        if(newScope.equals(ScopesStack.peek())) {
+            if (!CurrFuncName.isEmpty()) {
+                if (((Function) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type")).getIsRecursive())
+                    ;
+                {
+                    return new Param();
+                }
+            } else if (!currCallName.isEmpty()) {
+                if (((Function) scopedDeclaredFunctions.get(ScopesStack.peek()).get(currCallName).get("type")).getIsRecursive())
+                {
+                    return new Param();
+                }
+            }
+        }
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -712,51 +899,51 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         ScopesStack.push(newScope);
 
         // Visit the child nodes
-        Object lastDeclared = null;
+
         for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
             lastDeclared = visit(child);
         }
         // Pop the Scope after processing{
-        String lastScope =  ScopesStack.pop();
-        //if its inside a var declaration or a class declaration do:
-        if(!CurrVarDefining.isBlank()){
-            List<Map<String,Map<String,Object>>> lastDeclaredSymbols = findFromOnTable(CurrVarDefining+'.',scopedSymbolTable,lastScope);
+        String lastScope = ScopesStack.pop();
+        //if its inside a var declaration or a class declaration recover all the declared stuff and bring back
+        if (!CurrVarDefining.isBlank()) {
+            List<Map<String, Map<String, Object>>> lastDeclaredSymbols = findFromOnTable(CurrVarDefining + '.', scopedSymbolTable, lastScope);
             for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredSymbols) {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
                     // Insert into the scoped symbol table
-                    value.put("scope",ScopesStack.peek());
+                    value.put("scope", ScopesStack.peek());
                     scopedSymbolTable.get(ScopesStack.peek()).put(key, value);
                 }
             }
-            List<Map<String,Map<String,Object>>> lastDeclaredFunctions = findFromOnTable(CurrVarDefining+'.',scopedDeclaredFunctions,lastScope);
+            List<Map<String, Map<String, Object>>> lastDeclaredFunctions = findFromOnTable(CurrVarDefining + '.', scopedDeclaredFunctions, lastScope);
             for (Map<String, Map<String, Object>> lastDeclaredFun : lastDeclaredFunctions) {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredFun.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
                     // Insert into the scoped symbol table
-                    value.put("scope",ScopesStack.peek());
+                    value.put("scope", ScopesStack.peek());
                     scopedDeclaredFunctions.get(ScopesStack.peek()).put(key, value);
                 }
             }
-            List<Map<String,Map<String,Object>>> lasDeclaredParams = findFromOnTable(CurrVarDefining+'.',scopedParametersDeclarations,lastScope);
+            List<Map<String, Map<String, Object>>> lasDeclaredParams = findFromOnTable(CurrVarDefining + '.', scopedParametersDeclarations, lastScope);
             for (Map<String, Map<String, Object>> lastDeclaredSymbol : lasDeclaredParams) {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
                     // Insert into the scoped symbol table
-                    value.put("scope",ScopesStack.peek());
+                    value.put("scope", ScopesStack.peek());
                     scopedParametersDeclarations.get(ScopesStack.peek()).put(key, value);
                 }
             }
-            List<Map<String,Map<String,Object>>> lastDeclaredClasses = findFromOnTable(CurrVarDefining+'.',scopedDeclaredClasses,lastScope);
+            List<Map<String, Map<String, Object>>> lastDeclaredClasses = findFromOnTable(CurrVarDefining + '.', scopedDeclaredClasses, lastScope);
             for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredClasses) {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
                     // Insert into the scoped symbol table
-                    value.put("scope",ScopesStack.peek());
+                    value.put("scope", ScopesStack.peek());
                     scopedDeclaredClasses.get(ScopesStack.peek()).put(key, value);
                 }
             }
@@ -790,6 +977,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             scopedDeclaredClasses.get(ScopesStack.peek()).put(ClassName, inner);
             // recorrer todo en la declaracion de function ctx.function() para visitar los nodos
             visitChildren(ctx);
+
             this.CurrClasName = "";
         }else{
             System.err.println("Error: " + ClassName + " was already defined ");
@@ -815,7 +1003,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
                 Object type = visit(ctx.assignment());
                 if(type == null){
-                    attributeMap.put("type",new Undefined());
+                    attributeMap.put("type",new Param());
                 }else{
                     attributeMap.put("type",type);
                 }
@@ -825,7 +1013,53 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     scopedSymbolTable.get(ScopesStack.peek()).put(CurrVarDefining + "." + attribute, attributeMap);
                 }
 
-            } else if (Objects.equals(ctx.call().getText(), "this") && CurrClasName.isBlank()) {
+                //if its inside a var declaration or a class declaration recover all the declared stuff and bring back
+                if(!CurrClasName.isBlank()) {
+                    String lastScope = ScopesStack.pop();
+                    List<Map<String, Map<String, Object>>> lastDeclaredSymbols = findFromOnTable(CurrClasName + '.', scopedSymbolTable, lastScope);
+                    for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredSymbols) {
+                        for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                            String key = entry.getKey(); // Extract the key (String)
+                            Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                            // Insert into the scoped symbol table
+                            value.put("scope", ScopesStack.peek());
+                            scopedSymbolTable.get(ScopesStack.peek()).put(key, value);
+                        }
+                    }
+                    List<Map<String, Map<String, Object>>> lastDeclaredFunctions = findFromOnTable(CurrClasName + '.', scopedDeclaredFunctions, lastScope);
+                    for (Map<String, Map<String, Object>> lastDeclaredFun : lastDeclaredFunctions) {
+                        for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredFun.entrySet()) {
+                            String key = entry.getKey(); // Extract the key (String)
+                            Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                            // Insert into the scoped symbol table
+                            value.put("scope", ScopesStack.peek());
+                            scopedDeclaredFunctions.get(ScopesStack.peek()).put(key, value);
+                        }
+                    }
+                    List<Map<String, Map<String, Object>>> lasDeclaredParams = findFromOnTable(CurrClasName + '.', scopedParametersDeclarations, lastScope);
+                    for (Map<String, Map<String, Object>> lastDeclaredSymbol : lasDeclaredParams) {
+                        for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                            String key = entry.getKey(); // Extract the key (String)
+                            Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                            // Insert into the scoped symbol table
+                            value.put("scope", ScopesStack.peek());
+                            scopedParametersDeclarations.get(ScopesStack.peek()).put(key, value);
+                        }
+                    }
+                    List<Map<String, Map<String, Object>>> lastDeclaredClasses = findFromOnTable(CurrClasName + '.', scopedDeclaredClasses, lastScope);
+                    for (Map<String, Map<String, Object>> lastDeclaredSymbol : lastDeclaredClasses) {
+                        for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
+                            String key = entry.getKey(); // Extract the key (String)
+                            Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+                            // Insert into the scoped symbol table
+                            value.put("scope", ScopesStack.peek());
+                            scopedDeclaredClasses.get(ScopesStack.peek()).put(key, value);
+                        }
+                    }
+                    ScopesStack.push(lastScope);
+                }
+
+            } else if(Objects.equals(ctx.call().getText(), "this") && CurrClasName.isBlank()) {
                 System.err.println("Error: There is no class to define an attribute");
             }
         }else if(ctx.call() == null){ //symple var asignation
@@ -860,7 +1094,28 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             String operator = ctx.getChild(i).getText(); // Get the operator ('or')
 
             Object variableTemp = visit(ctx.getChild(i + 1)); // Visit the next logic_and child
-
+            if (variableTemp instanceof Param && variable instanceof Param) { //somehow both are parameters
+                variable = true;
+                variableTemp = true;
+            }
+            if (variableTemp instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variableTemp = variable;
+                }
+                else{
+                    variableTemp = innerType;
+                }
+            }
+            if (variable instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variable = variableTemp;
+                }
+                else{
+                    variable = innerType;
+                }
+            }
             if (variableTemp instanceof Boolean && variable instanceof Boolean) {
                 if ("or".equals(operator)) {
                     variable = (Boolean) variable || (Boolean) variableTemp;
@@ -869,7 +1124,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 System.err.println("Semantic Error: Comparisons do not generate boolean values for logical operations.");
             }
         }
-        return variable;
+        return variable instanceof Param? true: variable ;
     }
 
     //Lógica de los AND
@@ -891,7 +1146,24 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             String operator = ctx.getChild(i).getText(); // Get the operator ('and')
 
             Object variableTemp = visit(ctx.getChild(i + 1)); // Visit the next equality child
-
+            if (variableTemp instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variableTemp = variable;
+                }
+                else{
+                    variableTemp = innerType;
+                }
+            }
+            if (variable instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variable = variableTemp;
+                }
+                else{
+                    variable = innerType;
+                }
+            }
             if (variableTemp instanceof Boolean && variable instanceof Boolean) {
                 if ("and".equals(operator)) {
                     variable = (Boolean) variable && (Boolean) variableTemp;
@@ -900,7 +1172,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 System.err.println("Semantic Error: Comparisons do not generate boolean values for logical operations.");
             }
         }
-        return variable;
+        return variable instanceof Param? true: variable ;
     }
 
     //logica de la igualdad
@@ -923,7 +1195,28 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skipping by 2: get operator then the next comparison
             currentOperation = ctx.getChild(i).getText(); // '!=' or '=='
             Object variableTemp = visit(ctx.getChild(i + 1));
-
+            if (variableTemp instanceof Param && variable instanceof Param) { //both are params? then use default of True
+                variable = true;
+                variableTemp = true;
+            }
+            if (variableTemp instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variableTemp = variable;
+                }
+                else{
+                    variableTemp = innerType;
+                }
+            }
+            if (variable instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variable = variableTemp;
+                }
+                else{
+                    variable = innerType;
+                }
+            }
             // Check if both are of the same type or if the operation is valid
             if (variableTemp instanceof  Undefined){
                 System.err.println("Semantic Error: Invalid operation; cannot compare an undefined");
@@ -938,7 +1231,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 System.err.println("Semantic Error: Invalid operation; cannot compare different types.");
             }
         }
-        return variable;
+        return variable instanceof Param? true: variable ;
     }
 
     //lógica de las comparaciones
@@ -954,6 +1247,29 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         for (int i = 1; i < ctx.getChildCount(); i+=2) {
             Object variableTemp = visit(ctx.getChild(i+1));
             currentOperation = ctx.getChild(i).getText();
+            //if somehow both are params using default true value
+            if (variableTemp instanceof Param && variable instanceof Param) {
+                variable = true;
+                variableTemp = true;
+            }
+            if (variableTemp instanceof Param) {
+                Object innerType = (Param) ((Param) variableTemp).getTypeInstnce();
+                if(innerType == null) {
+                    variableTemp = variable;
+                }
+                else{
+                    variableTemp = innerType;
+                }
+            }
+            if (variable instanceof Param) {
+                Object innerType = (Param) ((Param) variable).getTypeInstnce();
+                if(innerType == null) {
+                    variable = variableTemp;
+                }
+                else{
+                    variable = innerType;
+                }
+            }
             // Determine if the current child is an operator or a value
             if (variableTemp instanceof  Undefined){
                 System.err.println("Semantic Error: Invalid operation; cannot compare an undefined");
@@ -968,7 +1284,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 System.err.println("Semantic Error: Invalid operation; cannot compare different types.");
             }
         }
-        return variable;
+        return variable instanceof Param? true: variable ;
     }
 
     //while statement

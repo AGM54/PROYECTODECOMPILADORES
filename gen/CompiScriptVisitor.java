@@ -166,6 +166,12 @@ public interface CompiScriptVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitCall(CompiScriptParser.CallContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSuperCall(CompiScriptParser.SuperCallContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link CompiScriptParser#primary}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

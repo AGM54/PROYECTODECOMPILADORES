@@ -328,6 +328,18 @@ public class CompiScriptBaseListener implements CompiScriptListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSuperCall(CompiScriptParser.SuperCallContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSuperCall(CompiScriptParser.SuperCallContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterPrimary(CompiScriptParser.PrimaryContext ctx) { }
 	/**
 	 * {@inheritDoc}

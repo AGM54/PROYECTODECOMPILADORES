@@ -1,10 +1,41 @@
-class Dog{
-    init(a){
-    this.name = a;
-    }
-    jump(){
-    print "doggo jump";
+class Persona {
+	init(nombre, edad) {
+		this.nombre = nombre;
+		this.edad = edad;
+		this.color = "rojo";
+	}
+
+	saludar() {
+		print "Hola, mi nombre es " + this.color;
+	}
+}
+
+class Estudiante extends Persona {
+	init(nombre, edad, grado) {
+		super.init(nombre, edad);
+		this.grado = grado;
+	}
+
+	estudiar() {
+		print this.nombre + " esta estudiando en " + this.grado + " grado.";
+	}
+}
+
+var nombre = "Erick";
+
+var ropero = new Persona(nombre, 20);
+var juan = new Estudiante(nombre, 20, 3);
+juan.saludar();    // Salida: Hola, mi nombre es Juan
+juan.estudiar();   // Salida: Juan esta estudiando en 3 grado
+
+fun esPar ( num ) {
+    return num % 2 == 0;
+}
+for ( var i = 1; i <= 10; i = i + 1) {
+    if ( esPar ( i ) ) {
+    print i + " es  par " ;
+    } else {
+    print i + "  es  impar " ;
     }
 }
-var y = new Dog("a");
-y.a = 0;
+

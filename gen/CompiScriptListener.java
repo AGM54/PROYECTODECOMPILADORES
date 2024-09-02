@@ -267,6 +267,16 @@ public interface CompiScriptListener extends ParseTreeListener {
 	 */
 	void exitCall(CompiScriptParser.CallContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 */
+	void enterSuperCall(CompiScriptParser.SuperCallContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 */
+	void exitSuperCall(CompiScriptParser.SuperCallContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link CompiScriptParser#primary}.
 	 * @param ctx the parse tree
 	 */
