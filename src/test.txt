@@ -19,23 +19,27 @@ class Estudiante extends Persona {
 	estudiar() {
 		print this.nombre + " esta estudiando en " + this.grado + " grado.";
 	}
-}
 
+	darId() {
+	    return this.nombre;
+	}
+}
 var nombre = "Erick";
 
 var ropero = new Persona(nombre, 20);
 var juan = new Estudiante(nombre, 20, 3);
 juan.saludar();    // Salida: Hola, mi nombre es Juan
 juan.estudiar();   // Salida: Juan esta estudiando en 3 grado
-
-fun esPar ( num ) {
-    return num % 2 == 0;
+juan.darId();
+for (var i = 1; i <= 5; i = i + 1) {
+  if (i % 2 == 0) {
+    print i + " es par";
+  } else {
+    print i + " es impar";
+  }
 }
-for ( var i = 1; i <= 10; i = i + 1) {
-    if ( esPar ( i ) ) {
-    print i + " es  par " ;
-    } else {
-    print i + "  es  impar " ;
-    }
+while (juan.edad < 25) {
+  juan.edad = juan.edad + 1;
+  print "Edad de Juan: " + juan.edad
 }
 
