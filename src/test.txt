@@ -1,4 +1,12 @@
-fun sumar(a,b){
-    return a+b;
+class TOP{
+    funInTop(){
+        a = 2;
+        class bottom{
+            funInBottomInsideFunTopInsideTOP(){
+                var a = 0;
+            }
+        }
+    }
 }
-var x = sumar(1,2);
+TOP.funInTop(2);
+print a;

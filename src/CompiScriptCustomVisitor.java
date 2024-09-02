@@ -102,43 +102,35 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         System.out.println("|Name|\t|Scope|\t|Type|\t|Super|\t|Arguments|");
         scopedSymbolTable.forEach((scope,table)->{
             table.forEach((id,data)->{
-                if (data.get("scope") == (scope)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
-                            + data.getOrDefault("type","").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
+                            + data.getOrDefault("type","") + "|" + data.getOrDefault("father", "") + "|" +
                             data.getOrDefault("params", "")
                     );
-                }
             });
         });
         scopedDeclaredClasses.forEach((scope,table)->{
             table.forEach((id,data)->{
-                if (data.get("scope") == (scope)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
                             + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
                             data.getOrDefault("params", "")
                     );
-                }
             });
         });
         scopedDeclaredFunctions.forEach((s,table)->{
             table.forEach((id,data)->{
-                if (data.get("scope") == (s)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
                             + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father","") + "|" +
                             data.getOrDefault("params","")
                     );
-                }
             });
         });
         scopedParametersDeclarations.forEach((s,table)->{
             table.forEach((id,data)->{
-                if (data.get("scope") == (s)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
                             + (((Param)data.get("type")).getTypeInstnce() == null? data.get("type").getClass().getSimpleName():((Param)data.get("type")).getTypeInstnce().getClass().getSimpleName())
                             + "|" + data.getOrDefault("father","") + "|" +
-                            data.getOrDefault("params","")
-                    );
-                }
+                            data.getOrDefault("params",""));
+
             });
         });
     }
@@ -392,17 +384,21 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 parameters.add(param.getText());
             }
             functMap.put("params",parameters);
+            //push the parameters into the scope
+
         }
+
         CurrFuncName = functionName;
         functMap.put("scope", ScopesStack.peek());
         functMap.put("returns",null);
+        functMap.put("params",new ArrayList<>());
         functMap.put("ctx",ctx);
         if (CurrClasName.isEmpty()){
             // Guarda la función en la tabla de funciones
             functMap.put("type",new Function(functionName){{setCtx(ctx);}});
             if(!scopedDeclaredFunctions.get(ScopesStack.peek().toString()).containsKey(functionName)) {
                 scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(functionName, functMap);
-                //visitChildren(ctx);
+                visitChildren(ctx);
                 CurrFuncName = "";
             }else{
                 System.err.println("Error: Function already defined" + functionName);
@@ -414,7 +410,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     CurrFuncName = CurrClasName + "." + functionName;
                     functMap.put("type",new Method(functionName){{setCtx(ctx);}});
                     scopedDeclaredFunctions.get(ScopesStack.peek().toString()).put(CurrClasName + "." + functionName,functMap);;
-                    //visitChildren(ctx);
+                    visitChildren(ctx);
                     CurrFuncName = "";
                 }else{
                     System.err.println("Error: Method already defined" + CurrClasName + "." + functionName);
@@ -425,6 +421,36 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 System.err.println("Error: " + CurrClasName + " not found in declaredClasses.");
             }
         }
+        // Populate new symbol tables from the existing scope
+        Map<String, Map<String, Object>> functsMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        // Insert new scope into the symbol table maps
+        String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        scopedDeclaredFunctions.put(newScope, functsMap);
+        scopedSymbolTable.put(newScope, symbolMap);
+        scopedDeclaredClasses.put(newScope, classMap);
+        scopedParametersDeclarations.put(newScope, paramMap);
+
+        // Push the new Scope into the stack
+        ScopesStack.push(newScope);
+        //push the parameters into the scope
+        for (String param : (List<String>) functMap.get("params")) {
+            if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)) {
+                scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
+                        new HashMap<>() {{
+                            put("type", new Param());
+                            put("scope", ScopesStack.peek());
+                        }});
+            } else {
+                Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
+                if (paramI.getTypeInstnce() == null) {
+                    System.err.println("Error : Parameter " + param + " is already declared ");
+                }
+            }
+        }
+        ScopesStack.pop();
         return null;
     }
 
@@ -515,7 +541,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     + " parameters " + receivedParams.size() + " found");
                 }
                 if(requParams != null){
-                    String newScope = ((Function) primary).getFunName();
+
                     // Create new symbol tables for the new scope
                     // Populate new symbol tables from the existing scope
                     Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
@@ -523,29 +549,34 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     // Insert new scope into the symbol table maps
+                    String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
                     scopedDeclaredFunctions.put(newScope, functMap);
                     scopedSymbolTable.put(newScope, symbolMap);
                     scopedDeclaredClasses.put(newScope, classMap);
                     scopedParametersDeclarations.put(newScope, paramMap);
 
                     // Push the new Scope into the stack
-                    if (!newScope.equals( ScopesStack.peek())){
-                        ScopesStack.push(newScope);}
-                    for(int i = 0 ; i < requParams.size() ; i++) {
+                    ScopesStack.push(newScope);
+                    //push the parameters into the scope
+                    for (int i = 0 ; i < requParams.size() ; i++) {
                         String paramName = requParams.get(i).toString();
                         Object type = receivedParams.get(i);
-                        scopedParametersDeclarations.get(newScope).put(paramName,
-                                new HashMap<>() {{
-                                    put("type", new Param() {{
-                                        setTypeInstnce(type);
+                        if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(paramName)) {
+                            scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
+                                    new HashMap<>() {{
+                                        put("type", new Param(){{setTypeInstnce(type);}});
+                                        put("scope", ScopesStack.peek());
                                     }});
-                                    put("scope", ScopesStack.peek());
-                                }});
+                        } else {
+                            Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
+                            if (paramI.getTypeInstnce() == null) {
+                                System.err.println("Error : Parameter " + paramName + " is already declared ");
+                            }
+                        }
                     }
-                    CurrFuncName = ((Function) primary).getFunName();
                     returner =  visitChildren(((Function) primary).getCtx());
-                    CurrFuncName = "";
-                }
+                    ScopesStack.pop();}
+
 
             }
         }
@@ -592,18 +623,19 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                             + params.size()  + " arguments " + (ctx.arguments() == null ? " none" : received.size())
                             + " were given");
                 }else{
-                    String newScope = CurrVarDefining;
+
                     // Create new symbol tables for the new scope
                     // Populate new symbol tables from the existing scope
                     Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-
+                    Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                    String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));;
                     // Insert new scope into the symbol table maps
                     scopedDeclaredFunctions.put(newScope, functMap);
                     scopedSymbolTable.put(newScope, symbolMap);
                     scopedDeclaredClasses.put(newScope, classMap);
-
+                    scopedParametersDeclarations.put(newScope,paramMap);
                     // Push the new Scope into the stack
                     ScopesStack.push(newScope);
                     for(int i = 0 ; i < params.size() ; i++){
@@ -622,67 +654,31 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //function block
     @Override
     public Object visitBlock(CompiScriptParser.BlockContext ctx) {
-        // Generate a new context
-        String newScope;
-        if (!CurrClasName.isEmpty()) {
-            if (!CurrFuncName.isEmpty()) {
-                newScope = CurrClasName + "." + CurrFuncName;
-                //get the params and add them into the scope
-
-            } else {
-                newScope = CurrClasName;
-            }
-        } else if (!CurrFuncName.isEmpty()) {
-            newScope = CurrFuncName;
-        } else {
-            newScope = "Anon" + AnonCount;
-            AnonCount++;
-        }
-
+        //Generate a new context
 
         // Create new symbol tables for the new scope
         // Populate new symbol tables from the existing scope
         Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
-        Map<String, Map<String, Object>> parametersMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+        Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
+        String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));;
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
-        scopedParametersDeclarations.put(newScope, parametersMap);
+        scopedParametersDeclarations.put(newScope, paramMap);
         // Push the new Scope into the stack
-        if (!newScope.equals( ScopesStack.peek())){
-        ScopesStack.push(newScope);}
-        //push the parameters into the scope
-        if (!CurrFuncName.isEmpty()) {
-            List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).getOrDefault("params", new ArrayList<String>());
-            for (String param : Params) {
-                if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(param)) {
-                    scopedParametersDeclarations.get(ScopesStack.peek()).put(param,
-                            new HashMap<>() {{
-                                put("type", new Param());
-                                put("scope", ScopesStack.peek());
-                            }});
-                } else {
-                    Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
-                    if (paramI.getTypeInstnce() == null) {
-                        System.err.println("Error : Parameter " + param + " is already declared ");
-                    }
-                }
-            }
+        ScopesStack.push(newScope);
+
+        // Visit the child nodes
+        Object lastDeclared = null;
+        for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
+            lastDeclared = visit(child);
         }
-
-            // Visit the child nodes
-            Object lastDeclared = null;
-            for (CompiScriptParser.DeclarationContext child : ctx.declaration()) {
-                lastDeclared = visit(child);
-            }
-
-            // Pop the Scope after processing
-            ScopesStack.pop();
-
-            return lastDeclared;
+        // Pop the Scope after processing
+        ScopesStack.pop();
+        return lastDeclared;
     }
     /* Manejo de las clases y sus instancias */
 
@@ -947,7 +943,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
 
         // Visit the 'else' statement if it exists
         if (ctx.statement(1) != null) {
-            visit(ctx.statement(1));
+            return visit(ctx.statement(1));
         }
 
         return null;
