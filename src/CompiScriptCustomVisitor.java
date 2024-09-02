@@ -104,7 +104,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             table.forEach((id,data)->{
                 if (data.get("scope") == (scope)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
-                            + data.getOrDefault("type","") + "|" + data.getOrDefault("father", "") + "|" +
+                            + data.getOrDefault("type","").getClass().getSimpleName() + "|" + data.getOrDefault("father", "") + "|" +
                             data.getOrDefault("params", "")
                     );
                 }
@@ -134,7 +134,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             table.forEach((id,data)->{
                 if (data.get("scope") == (s)) {
                     System.out.println("|" + id + "|" + data.get("scope") + "|"
-                            + data.get("type").getClass().getSimpleName() + "|" + data.getOrDefault("father","") + "|" +
+                            + (((Param)data.get("type")).getTypeInstnce() == null? data.get("type").getClass().getSimpleName():((Param)data.get("type")).getTypeInstnce().getClass().getSimpleName())
+                            + "|" + data.getOrDefault("father","") + "|" +
                             data.getOrDefault("params","")
                     );
                 }
@@ -168,7 +169,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             else if (scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(varName)) {
                 return scopedDeclaredFunctions.get(ScopesStack.peek()).get(varName).get("type");
             }else if(scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(varName)) {
-                return scopedParametersDeclarations.get(ScopesStack.peek()).get(varName).get("type");
+                Param express = (Param)scopedParametersDeclarations.get(ScopesStack.peek()).get(varName).get("type");
+                if(express.getTypeInstnce() != null){
+                    return express.getTypeInstnce();
+                }else{
+                    return express;
+                }
             }
             else {
                 System.err.println("Error: Unknown symbol :" + varName);
@@ -523,7 +529,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     scopedParametersDeclarations.put(newScope, paramMap);
 
                     // Push the new Scope into the stack
-                    //ScopesStack.push(newScope);
+                    if (!newScope.equals( ScopesStack.peek())){
+                        ScopesStack.push(newScope);}
                     for(int i = 0 ; i < requParams.size() ; i++) {
                         String paramName = requParams.get(i).toString();
                         Object type = receivedParams.get(i);
@@ -645,7 +652,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         scopedDeclaredClasses.put(newScope, classMap);
         scopedParametersDeclarations.put(newScope, parametersMap);
         // Push the new Scope into the stack
-        ScopesStack.push(newScope);
+        if (!newScope.equals( ScopesStack.peek())){
+        ScopesStack.push(newScope);}
         //push the parameters into the scope
         if (!CurrFuncName.isEmpty()) {
             List<String> Params = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).getOrDefault("params", new ArrayList<String>());
@@ -660,7 +668,6 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
                     if (paramI.getTypeInstnce() == null) {
                         System.err.println("Error : Parameter " + param + " is already declared ");
-
                     }
                 }
             }
