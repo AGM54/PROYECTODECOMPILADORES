@@ -1,12 +1,10 @@
-class TOP{
-    funInTop(){
-        a = 2;
-        class bottom{
-            funInBottomInsideFunTopInsideTOP(){
-                var a = 0;
-            }
-        }
+class Dog{
+    init(a){
+    this.name = a;
+    }
+    jump(){
+    print "doggo jump";
     }
 }
-TOP.funInTop(2);
-print a;
+var y = new Dog("a");
+y.a = 0;
