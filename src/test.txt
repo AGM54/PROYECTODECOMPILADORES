@@ -1,6 +1,12 @@
-class Test{
-    init(a){
-    this.a = 1;
+class TOP{
+    funInTop(){
+        a = 2;
+        class bottom{
+            funInBottomInsideFunTopInsideTOP(){
+                var a = 0;
+            }
+        }
     }
-    MethodInsideClass(){}
 }
+TOP.funInTop(2);
+print a;

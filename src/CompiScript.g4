@@ -46,8 +46,7 @@ instantiation   : 'new' IDENTIFIER '(' arguments? ')';
 unary           : ( '!' | '-' ) unary
                 | call ;
 
-call            : primary ( '(' arguments? ')' | '.' IDENTIFIER | '[' expression ']')*
-                | funAnon;
+call            : primary ( '(' arguments? ')' | '.' IDENTIFIER | '[' expression ']')*;
 
 primary         : 'true' | 'false' | 'nil' | 'this'
                 | NUMBER | STRING | IDENTIFIER | '(' expression ')'
