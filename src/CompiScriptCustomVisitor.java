@@ -918,7 +918,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
         }
 
-        // Visit the increment expression (if present)
+        // Visit the increment expression (if present)  //only if 
         if (ctx.expression(1) != null) {
             visit(ctx.expression(1));
         }
@@ -950,3 +950,4 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     }
 
 }
+
