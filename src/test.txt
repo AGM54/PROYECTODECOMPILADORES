@@ -42,4 +42,3 @@ while (juan.edad < 25) {
   juan.edad = juan.edad + 1;
   print "Edad de Juan: " + juan.edad
 }
-
