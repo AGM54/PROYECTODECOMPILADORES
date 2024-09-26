@@ -4,14 +4,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 
-
-public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
-    //Simple expressions
+public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
+    // Simple expressions
     private int tempCounter = 0;
     private int labelCount = 0; // Unique label counter
 
-    //generates a new temporal pointing to the expression given
-    private String newTemp(){
+    // Generates a new temporary variable for expressions
+    private String newTemp() {
         return "t" + (tempCounter++);
     }
 
@@ -32,7 +31,7 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
     }
 
     // Method to write TAC instructions to a file
-    public  void writeToFile(String filePath) {
+    public void writeToFile(String filePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
             for (String instruction : this.instructions) {
                 writer.write(instruction);
@@ -44,9 +43,9 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         }
     }
 
-    //returning the primaries:
+    // Returning the primaries:
     @Override
-    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx){
+    public Object visitPrimary(CompiScriptParser.PrimaryContext ctx) {
         if (ctx.NUMBER() != null) {
             return ctx.NUMBER().getText();  // Return the number
         } else if (ctx.IDENTIFIER() != null) {
@@ -57,9 +56,9 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         return "";
     }
 
-    //Aritmetic ( term )  +,-
+    // Arithmetic (term) +, -
     @Override
-    public  Object visitTerm(CompiScriptParser.TermContext ctx){
+    public Object visitTerm(CompiScriptParser.TermContext ctx) {
         String result = String.valueOf(visit(ctx.factor(0)));
         // If there are additional factors with '+' or '-' operations
         for (int i = 1; i < ctx.factor().size(); i++) {
@@ -74,16 +73,16 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         return result;
     }
 
-    // Visit factor: handles '*' '/' '%'
+    // Visit factor: handles '*', '/', '%'
     @Override
     public Object visitFactor(CompiScriptParser.FactorContext ctx) {
         // Visit the first unary
         String result = String.valueOf(visit(ctx.unary(0)));
 
-        // If there are additional unaries with '*' '/' '%' operations
+        // If there are additional unaries with '*', '/', '%' operations
         for (int i = 1; i < ctx.unary().size(); i++) {
             String nextUnary = String.valueOf(visit(ctx.unary(i)));
-            String op = ctx.getChild(2 * i - 1).getText();  // '*' '/' '%'
+            String op = ctx.getChild(2 * i - 1).getText();  // '*', '/', '%'
 
             // Generate TAC for the operation
             String temp = newTemp();
@@ -111,16 +110,46 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         }
     }
 
-    //visit var asigment
+    // Visit var assignment
     @Override
     public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
         String varName = ctx.IDENTIFIER().getText();
         Object val = visit(ctx.expression());
         instructions.add(varName + " = " + val);
         return null;
-    };
+    }
 
-    //visiting the loops:
+    // Visit if statement
+    @Override
+    public Object visitIfStmt(CompiScriptParser.IfStmtContext ctx) {
+        // Generate labels for true block, false block, and end
+        String labelElse = generateLabel();
+        String labelEnd = generateLabel();
+
+        // Visit the condition expression
+        String condition = String.valueOf(visit(ctx.expression()));
+
+        // Generate TAC for the condition
+        instructions.add(generateConditionTAC(condition, labelElse));
+
+        // Visit the 'if' block (true case)
+        visit(ctx.statement(0));  // The first statement is the 'if' body
+
+        // Jump to end if true
+        instructions.add("goto " + labelEnd);
+
+        // False block (else, if present)
+        instructions.add(labelElse + ":");
+        if (ctx.statement(1) != null) {
+            visit(ctx.statement(1));  // The second statement is the 'else' body
+        }
+
+        // End label
+        instructions.add(labelEnd + ":");
+
+        return null;
+    }
+
     // Visit while loop
     @Override
     public String visitWhileStmt(CompiScriptParser.WhileStmtContext ctx) {
@@ -134,6 +163,7 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         // Visit condition and generate condition TAC
         String condition = String.valueOf(visit(ctx.expression()));  // Assume `visitCondition` handles condition generation
         instructions.add(generateConditionTAC(condition, endLabel));
+
         // Visit loop body
         visit(ctx.statement());
 
@@ -154,38 +184,26 @@ public class IntermediateCodeVisitor extends  CompiScriptBaseVisitor<Object>{
         String endLabel = generateLabel();
 
         // Visit initialization
-        if (ctx.varDecl() != null) { // the var i = something on a for loop
+        if (ctx.varDecl() != null) {
             String initialization = String.valueOf(visit(ctx.varDecl()));
             instructions.add(initialization);
-        } else if (ctx.exprStmt() != null) { // if its not a var = something, a expression perhaps?
+        } else if (ctx.exprStmt() != null) {
             String expression = String.valueOf(visit(ctx.exprStmt()));
             instructions.add(expression);
         }
 
         // Start of the loop
         instructions.add(startLabel + ":");
+
         // Visit the condition expression (if present)
         if (ctx.expression(0) != null) {
             String exprResult = String.valueOf(visit(ctx.expression(0)));
-            // Visit condition
             instructions.add(generateConditionTAC(exprResult, endLabel));
         }
 
         // Visit loop body
         visit(ctx.statement());
-        if (ctx.varDecl() != null) {
-            visit(ctx.varDecl());
-        } else if (ctx.exprStmt() != null) {
-            visit(ctx.exprStmt());
-        }
 
-        // Visit the condition expression (if present)
-        if (ctx.expression(0) != null) {
-            Object exprResult = visit(ctx.expression(0));
-            if (!(exprResult instanceof Boolean)) {
-                throw new RuntimeException("Error : For conditional -> " + exprResult.getClass().getSimpleName() + " " + exprResult.toString() + " is not boolean order");
-            }
-        }
         // Visit the increment expression (if present)
         if (ctx.expression(1) != null) {
             String increase = String.valueOf(visit(ctx.expression(1)));

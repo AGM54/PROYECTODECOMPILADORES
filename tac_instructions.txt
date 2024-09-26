@@ -1,6 +1,8 @@
-b = 1
+a = 5
+b = 10
+ifFalse b goto L0
+c = 1
+goto L1
 L0:
-ifFalse 10 goto L1
-t0 = b + 1
-goto L0
+c = 0
 L1:
