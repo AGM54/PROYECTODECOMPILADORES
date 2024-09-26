@@ -1,6 +1,6 @@
 b = 1
-c = 2
-d = 3
-t0 = c * d
-t1 = b + t0
-a = t1
+L0:
+ifFalse 10 goto L1
+t0 = b + 1
+goto L0
+L1:
