@@ -1,8 +1,18 @@
-a = 5
-b = 10
-ifFalse b goto L0
-c = 1
-goto L1
+nombre = "Erick"
+i = 1
+null
 L0:
-c = 0
+t0 = i <= 5
+ifFalse t0 goto L1
+t1 = i % 2
+t2 = t1 == 0
+ifFalse t2 goto L2
+t3 = i + " es par"
+goto L3
+L2:
+t4 = i + " es impar"
+L3:
+t5 = i + 1
+t5
+goto L0
 L1:

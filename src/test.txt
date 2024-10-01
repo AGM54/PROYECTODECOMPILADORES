@@ -1,8 +1,8 @@
-var a = 5;
-var b = 10;
-
-if (a < b) {
-    var c = 1;
-} else {
-    var c = 0;
+var nombre = "Erick";
+for (var i = 1; i <= 5; i = i + 1) {
+  if (i % 2 == 0) {
+    print i + " es par";
+  } else {
+    print i + " es impar";
+  }
 }

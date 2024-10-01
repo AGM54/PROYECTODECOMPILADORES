@@ -52,6 +52,8 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             return ctx.IDENTIFIER().getText();  // Return the variable name
         } else if (ctx.expression() != null) {
             return visit(ctx.expression());  // Parenthesized expression
+        } else if(ctx.STRING() != null){
+            return ctx.STRING().getText();
         }
         return "";
     }
@@ -218,4 +220,100 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         return null;
     }
+
+    // Visit comparison (==, !=, >, <, >=, <=)
+    @Override
+    public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
+        String left = String.valueOf(visit(ctx.comparison(0)));  // Visit the left side of the comparison
+        String result = left;
+
+        // If there are multiple comparisons
+        for (int i = 1; i < ctx.comparison().size(); i++) {
+            String right = String.valueOf(visit(ctx.comparison(i)));
+            String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!=', '>', '<', etc.
+
+            // Generate TAC for the comparison operation
+            String temp = newTemp();
+            instructions.add(temp + " = " + left + " " + operator + " " + right);
+            result = temp;  // The result becomes the new temporary variable
+        }
+
+        return result;
+    }
+    @Override
+    public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
+        String left = String.valueOf(visit(ctx.term(0)));  // Visit the left side of the comparison
+        String result = left;
+
+        // If there are multiple comparisons
+        for (int i = 1; i < ctx.term().size(); i++) {
+            String right = String.valueOf(visit(ctx.term(i)));
+            String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!=', '>', '<', etc.
+
+            // Generate TAC for the comparison operation
+            String temp = newTemp();
+            instructions.add(temp + " = " + left + " " + operator + " " + right);
+            result = temp;  // The result becomes the new temporary variable
+        }
+
+        return result;
+    }
+
+    //visiting logic
+    //I wanna F'ng die :D
+
+    //the or logic
+    @Override
+    public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx){
+        if(ctx.getChildCount() == 1){
+            if(ctx.logic_and().size() == 1){
+                return visit( ctx.logic_and().getFirst() );
+            }else{
+                for (CompiScriptParser.Logic_andContext child : ctx.logic_and()) {
+                    return visit(child);
+                }
+            }
+        }
+
+        String result = String.valueOf(visit(ctx.logic_and(0)));
+
+        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'or' and its subsequent logic_and
+
+            String nextComparison = String.valueOf(visit(ctx.logic_and(i+1))); // Visit the next logic_and child
+            // Generate TAC for the logical operation
+            String temp = newTemp();
+
+            instructions.add(temp + " = " + result + " || " + nextComparison);
+            result = temp;
+        }
+        return result;
+    }
+
+    //the and logic
+    @Override
+    public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
+        if(ctx.getChildCount() == 1){
+            if(ctx.equality().size() == 1){
+                return visit( ctx.equality().getFirst() );
+            }else{
+                for (CompiScriptParser.EqualityContext child : ctx.equality()) {
+                    return visit(child);
+                }
+            }
+        }
+
+        String result = String.valueOf(visit(ctx.equality(0)));
+
+        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'or' and its subsequent logic_and
+
+            String nextComparison = String.valueOf(visit(ctx.equality(i+1))); // Visit the next logic_and child
+            // Generate TAC for the logical operation
+            String temp = newTemp();
+
+            instructions.add(temp + " = " + result + " || " + nextComparison);
+            result = temp;
+        }
+        return result;
+    };
+
 }
