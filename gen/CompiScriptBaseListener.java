@@ -1,4 +1,4 @@
-// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from C:/Users/marce/Desktop/PROYECTODECOMPILADORES-experimental/src/CompiScript.g4 by ANTLR 4.13.1
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ErrorNode;

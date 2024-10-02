@@ -52,7 +52,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             return ctx.IDENTIFIER().getText();  // Return the variable name
         } else if (ctx.expression() != null) {
             return visit(ctx.expression());  // Parenthesized expression
-        } else if(ctx.STRING() != null){
+        } else if (ctx.STRING() != null) {
             return ctx.STRING().getText();
         }
         return "";
@@ -163,7 +163,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         instructions.add(startLabel + ":");
 
         // Visit condition and generate condition TAC
-        String condition = String.valueOf(visit(ctx.expression()));  // Assume `visitCondition` handles condition generation
+        String condition = String.valueOf(visit(ctx.expression()));
         instructions.add(generateConditionTAC(condition, endLabel));
 
         // Visit loop body
@@ -187,11 +187,9 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         // Visit initialization
         if (ctx.varDecl() != null) {
-            String initialization = String.valueOf(visit(ctx.varDecl()));
-            instructions.add(initialization);
+            visit(ctx.varDecl()); // Correct initialization
         } else if (ctx.exprStmt() != null) {
-            String expression = String.valueOf(visit(ctx.exprStmt()));
-            instructions.add(expression);
+            visit(ctx.exprStmt());
         }
 
         // Start of the loop
@@ -208,8 +206,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         // Visit the increment expression (if present)
         if (ctx.expression(1) != null) {
-            String increase = String.valueOf(visit(ctx.expression(1)));
-            instructions.add(increase);
+            visit(ctx.expression(1)); // Visit increment statement
         }
 
         // Jump back to condition
@@ -218,6 +215,35 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         // End of the loop
         instructions.add(endLabel + ":");
 
+        return null;
+    }
+
+    // Visit class declaration
+    @Override
+    public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
+        String className = ctx.IDENTIFIER(0).getText();
+        String parentClass = ctx.IDENTIFIER(1) != null ? ctx.IDENTIFIER(1).getText() : "Object"; // Check for inheritance
+        instructions.add("class " + className + " extends " + parentClass + " {");
+
+        // Visit all the functions in the class
+        for (CompiScriptParser.FunctionContext functionCtx : ctx.function()) {
+            visit(functionCtx);
+        }
+
+        instructions.add("}");
+        return null;
+    }
+
+    // Visit function declaration
+    @Override
+    public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
+        String functionName = ctx.IDENTIFIER().getText();
+        instructions.add("function " + functionName + " {");
+
+        // Visit the function body (block)
+        visit(ctx.block());
+
+        instructions.add("}");
         return null;
     }
 
@@ -240,6 +266,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         return result;
     }
+
     @Override
     public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
         String left = String.valueOf(visit(ctx.term(0)));  // Visit the left side of the comparison
@@ -259,61 +286,31 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         return result;
     }
 
-    //visiting logic
-    //I wanna F'ng die :D
-
-    //the or logic
+    // Visit logic OR
     @Override
-    public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx){
-        if(ctx.getChildCount() == 1){
-            if(ctx.logic_and().size() == 1){
-                return visit( ctx.logic_and().getFirst() );
-            }else{
-                for (CompiScriptParser.Logic_andContext child : ctx.logic_and()) {
-                    return visit(child);
-                }
-            }
-        }
-
+    public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx) {
         String result = String.valueOf(visit(ctx.logic_and(0)));
 
-        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'or' and its subsequent logic_and
-
-            String nextComparison = String.valueOf(visit(ctx.logic_and(i+1))); // Visit the next logic_and child
-            // Generate TAC for the logical operation
+        for (int i = 1; i < ctx.getChildCount(); i += 2) {
+            String nextComparison = String.valueOf(visit(ctx.logic_and(i + 1)));
             String temp = newTemp();
-
             instructions.add(temp + " = " + result + " || " + nextComparison);
             result = temp;
         }
         return result;
     }
 
-    //the and logic
+    // Visit logic AND
     @Override
     public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
-        if(ctx.getChildCount() == 1){
-            if(ctx.equality().size() == 1){
-                return visit( ctx.equality().getFirst() );
-            }else{
-                for (CompiScriptParser.EqualityContext child : ctx.equality()) {
-                    return visit(child);
-                }
-            }
-        }
-
         String result = String.valueOf(visit(ctx.equality(0)));
 
-        for (int i = 1; i < ctx.getChildCount(); i += 2) { // Skip by 2 to reach each 'or' and its subsequent logic_and
-
-            String nextComparison = String.valueOf(visit(ctx.equality(i+1))); // Visit the next logic_and child
-            // Generate TAC for the logical operation
+        for (int i = 1; i < ctx.getChildCount(); i += 2) {
+            String nextComparison = String.valueOf(visit(ctx.equality(i + 1)));
             String temp = newTemp();
-
-            instructions.add(temp + " = " + result + " || " + nextComparison);
+            instructions.add(temp + " = " + result + " && " + nextComparison);
             result = temp;
         }
         return result;
-    };
-
+    }
 }
