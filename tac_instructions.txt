@@ -1,6 +1,13 @@
-class Persona extends Object {
-function saludar {
-nombre = "hola"
-t0 = "Hola " + nombre
-}
-}
+FUN saludar
+	PARAM a
+	PARAM b
+	T_0:= a + b
+	a:= T_0
+	nombre:= "hola"
+	T_1:= "Hola " + nombre
+	T_2:= T_1 + a
+	OUT T_2
+ENDFUN
+PARAM "a"
+PARAM "b"
+CALL saludar

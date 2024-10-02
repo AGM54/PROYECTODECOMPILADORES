@@ -731,8 +731,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                 ScopesStack.push(actual);
                                 scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText(),att);
                             }else {
-                                throw new RuntimeException("Error : " + CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText() + " is not defined");
-                            }
+                                throw new RuntimeException("Error : " + CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText() + " is not defined");}
                         }
                     }else{
                         throw new RuntimeException("cant call a blank attribute");

@@ -1,6 +1,7 @@
-class Persona {
-  fun saludar() {
-    var nombre = "hola";
-    print "Hola " + nombre;
-  }
+fun saludar(a,b) {
+var a = a + b;
+var nombre = "hola";
+print "Hola " + nombre + a;
 }
+
+saludar("a","b");
