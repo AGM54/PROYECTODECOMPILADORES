@@ -3,18 +3,26 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
     private String CurrClasName = "";
+    private String CurrFatherCall = "";
     // Simple expressions
     private int tempCounter = 0;
     private int labelCount = 0; // Unique label counter
     private int tabCounter = 0;
-
+    private int pointerCounter = 0;
     // Generates a new temporary variable for expressions
     private String newTemp() {
         return "T_" + (tempCounter++);
+    }
+
+    // Generates a pointer used for referencing an attribute of a class
+    // is a place holder for "retrieving the memory direction"
+    private String newPointer(){
+        return "P_" + (pointerCounter++);
     }
 
     // Helper function to generate TAC for an if condition
@@ -57,6 +65,10 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             return visit(ctx.expression());  // Parenthesized expression
         } else if (ctx.STRING() != null) {
             return ctx.STRING().getText();
+        }else if (ctx.superCall() != null){
+            return CurrFatherCall + "::" + ctx.superCall().IDENTIFIER().getText();
+        } else if (ctx.getText().equals("this")) {
+            return "this";
         }
         return "";
     }
@@ -124,6 +136,22 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
+    public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
+        if(ctx.logic_or() != null) {
+            return visit(ctx.logic_or());
+        } else if (ctx.call() != null) {
+            //get a pointer into a parameter
+            //add the instruction of retrieving it
+            if(Objects.equals(ctx.call().getText(), "this")){
+                String pointer = newPointer();
+                instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +CurrClasName + "::" + ctx.IDENTIFIER().getText());
+                //get the new expression
+                String val = String.valueOf(visit(ctx.assignment()));
+                instructions.add("\t".repeat(tabCounter) + pointer + ":= " + val);
+            }
+        }
+        return null;
+    }
     // Visit if statement
     @Override
     public Object visitIfStmt(CompiScriptParser.IfStmtContext ctx) {
@@ -135,18 +163,21 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         String condition = String.valueOf(visit(ctx.expression()));
 
         // Generate TAC for the condition
-        instructions.add("\t".repeat(tabCounter) +generateConditionTAC(condition, labelElse));
 
+        instructions.add("\t".repeat(tabCounter) +generateConditionTAC(condition, labelElse));
+        tabCounter++;
         // Visit the 'if' block (true case)
         visit(ctx.statement(0));  // The first statement is the 'if' body
 
         // Jump to end if true
         instructions.add("\t".repeat(tabCounter) + "goto " + labelEnd);
-
+        tabCounter--;
         // False block (else, if present)
         instructions.add("\t".repeat(tabCounter) + labelElse + ":");
         if (ctx.statement(1) != null) {
+            tabCounter++;
             visit(ctx.statement(1));  // The second statement is the 'else' body
+            tabCounter--;
         }
 
         // End label
@@ -227,16 +258,14 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     public Object visitClassDecl(CompiScriptParser.ClassDeclContext ctx) {
         CurrClasName = ctx.IDENTIFIER(0).getText();
         String className = ctx.IDENTIFIER(0).getText();
-        String parentClass = ctx.IDENTIFIER(1) != null ? ctx.IDENTIFIER(1).getText() : "Object"; // Check for inheritance
-        instructions.add("class " + className + " extends " + parentClass + " {");
+        CurrFatherCall = ctx.IDENTIFIER().size() > 1 ? ctx.IDENTIFIER().get(1).toString() : "";
 
         // Visit all the functions in the class
         for (CompiScriptParser.FunctionContext functionCtx : ctx.function()) {
             visit(functionCtx);
         }
-
-        instructions.add("}");
-        className = "";
+        CurrClasName = "";
+        CurrFatherCall = "";
         return null;
     }
 
@@ -281,7 +310,15 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        String primary = String.valueOf(visit(ctx.getChild(0)));
+
+
+        String primary = String.valueOf(visit(ctx.primary()));
+        if(primary.equals("this")){
+            //return the pointer that will have the information loaded
+            String pointer = newPointer();
+            instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +CurrClasName + "::" + ctx.IDENTIFIER().getFirst().getText());
+            return pointer;
+        }
         if(ctx.arguments() != null && !ctx.arguments().isEmpty()){
             CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
             for(int i= 0; i <arguments.getChildCount() ; i+=2){
