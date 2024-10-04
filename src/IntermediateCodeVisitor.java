@@ -127,15 +127,21 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         }
     }
 
+    private String currentInstanceName = "";
     // Visit var assignment
     @Override
     public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
+        // Capturamos el nombre de la variable que se está declarando
         String varName = ctx.IDENTIFIER().getText();
-        Object val = visit(ctx.expression());
-        instructions.add("\t".repeat(tabCounter) + varName + ":= " + val);
+
+        // Si es una instanciación, visitamos la expresión para capturar la instancia
+        if (ctx.expression() != null) {
+            currentInstanceName = varName;  // Guardamos el nombre de la instancia
+            visit(ctx.expression());  // Visitamos la expresión
+        }
+
         return null;
     }
-
     public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
         if(ctx.logic_or() != null) {
             return visit(ctx.logic_or());
@@ -301,34 +307,48 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
-        if (ctx.getChildCount() == 1){ //primary call
-            if (ctx.primary() != null) {
-                if (ctx.primary().array() != null) { // is an array (somehow)
-                    return visit(ctx.primary().array());
-                } else { //just a primary
-                    return visit(ctx.primary());
+        // Verificamos si estamos trabajando con una instancia de "new"
+        if (ctx.primary().instantiation() != null) {
+            // Obtenemos el nombre de la clase que estamos instanciando
+            String className = ctx.primary().instantiation().IDENTIFIER().getText();
+
+            // Usamos el nombre de la instancia almacenado en currentInstanceName
+            String instanceName = currentInstanceName;
+
+            // Manejamos los argumentos (parámetros pasados al constructor)
+            CompiScriptParser.ArgumentsContext arguments = ctx.primary().instantiation().arguments();
+            if (arguments != null) {
+                for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
+                    String arg = String.valueOf(visit(arguments.getChild(i)));
+                    instructions.add("\t".repeat(tabCounter) + "PARAM " + arg);  // Pushea cada argumento
                 }
             }
+
+            // Generamos la instrucción de ALLOCATE para reservar memoria para el objeto
+            instructions.add("\t".repeat(tabCounter) + "ALLOCATE " + instanceName);
+
+            // Llamada al constructor con la clase especificada
+            instructions.add("\t".repeat(tabCounter) + "CALL " + className + "::init");
+
+            return instanceName;  // Retorna el nombre de la instancia
         }
 
-
+        // Si no es una instancia de "new", manejamos una llamada regular
         String primary = String.valueOf(visit(ctx.primary()));
-        if(primary.equals("this")){
-            //return the pointer that will have the information loaded
-            String pointer = newPointer();
-            instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +CurrClasName + "::" + ctx.IDENTIFIER().getFirst().getText());
-            return pointer;
-        }
-        if(ctx.arguments() != null && !ctx.arguments().isEmpty()){
-            CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
-            for(int i= 0; i <arguments.getChildCount() ; i+=2){
+
+        // Si hay argumentos en la llamada
+        if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+            CompiScriptParser.ArgumentsContext arguments = ctx.arguments().get(0);  // Primer set de argumentos
+            for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
                 String arg = String.valueOf(visit(arguments.getChild(i)));
-                instructions.add("\t".repeat(tabCounter) + "PARAM " + arg);
+                instructions.add("\t".repeat(tabCounter) + "PARAM " + arg);  // Pushea cada argumento
             }
         }
 
-        instructions.add("\t".repeat(tabCounter) + "CALL "+ primary);
-        return null;
+        // Generamos la llamada a la función
+        instructions.add("\t".repeat(tabCounter) + "CALL " + primary);
+
+        return null;  // No devolvemos nada porque es una llamada a función regular
     }
 
     // Visit comparison (==, !=, >, <, >=, <=)

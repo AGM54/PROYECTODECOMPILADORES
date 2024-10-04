@@ -17,7 +17,7 @@ class Estudiante extends Persona {
   }
 
   estudiar() {
-    print this.nombre + " esta estudiando en " + this.grado + " grado.";
+    print this.nombre + " está estudiando en " + this.grado + " grado.";
   }
 }
 
@@ -26,7 +26,7 @@ var nombre = "Erick";
 var ropero = new Persona(nombre, 20);
 var juan = new Estudiante(nombre, 20, 3);
 juan.saludar();    // Salida: Hola, mi nombre es Juan
-juan.estudiar();   // Salida: Juan esta estudiando en 3 grado
+juan.estudiar();   // Salida: Juan está estudiando en 3er grado
 
 for (var i = 1; i <= 5; i = i + 1) {
   if (i % 2 == 0) {

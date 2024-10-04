@@ -2,62 +2,94 @@ FUN Persona::init
 	PARAM nombre
 	PARAM edad
 	LOAD P_0 Persona::nombre
-	P_0:= nombre
+	CALL nombre
+	P_0:= null
 	LOAD P_1 Persona::edad
-	P_1:= edad
+	CALL edad
+	P_1:= null
 	LOAD P_2 Persona::color
-	P_2:= "rojo"
+	CALL "rojo"
+	P_2:= null
 ENDFUN
 FUN Persona::saludar
-	LOAD P_3 Persona::color
-	T_0:= "Hola, mi nombre es " + P_3
+	CALL "Hola, mi nombre es "
+	CALL this
+	T_0:= null + null
 	OUT T_0
 ENDFUN
 FUN Estudiante::init
 	PARAM nombre
 	PARAM edad
 	PARAM grado
-	PARAM nombre
-	PARAM edad
+	CALL nombre
+	PARAM null
+	CALL edad
+	PARAM null
 	CALL Persona::init
-	LOAD P_4 Estudiante::grado
-	P_4:= grado
+	LOAD P_3 Estudiante::grado
+	CALL grado
+	P_3:= null
 ENDFUN
 FUN Estudiante::estudiar
-	LOAD P_5 Estudiante::nombre
-	T_1:= P_5 + " esta estudiando en "
-	LOAD P_6 Estudiante::grado
-	T_2:= T_1 + P_6
-	T_3:= T_2 + " grado."
+	CALL this
+	CALL " está estudiando en "
+	T_1:= null + null
+	CALL this
+	T_2:= T_1 + null
+	CALL " grado."
+	T_3:= T_2 + null
 	OUT T_3
 ENDFUN
-nombre:= "Erick"
-ropero:= 
-juan:= 
+CALL "Erick"
+CALL nombre
+PARAM null
+CALL 20
+PARAM null
+ALLOCATE ropero
+CALL Persona::init
+CALL nombre
+PARAM null
+CALL 20
+PARAM null
+CALL 3
+PARAM null
+ALLOCATE juan
+CALL Estudiante::init
 CALL juan
 CALL juan
-i:= 1
+CALL 1
 L_0:
-T_4:= i <= 5
+CALL i
+CALL 5
+T_4:= null <= null
 ifFalse T_4 goto L_1
-	T_5:= i % 2
-	T_6:= T_5 == 0
+	CALL i
+	CALL 2
+	T_5:= null % null
+	CALL 0
+	T_6:= T_5 == null
 	ifFalse T_6 goto L_2
-		T_7:= i + " es par"
+		CALL i
+		CALL " es par"
+		T_7:= null + null
 		OUT T_7
 		goto L_3
 	L_2:
-		T_8:= i + " es impar"
+		CALL i
+		CALL " es impar"
+		T_8:= null + null
 		OUT T_8
 	L_3:
 goto L_0
 L_1:
 L_4:
 CALL juan
-T_9:= null < 25
+CALL 25
+T_9:= null < null
 ifFalse T_9 goto L_5
+	CALL "Edad de Juan: "
 	CALL juan
-	T_10:= "Edad de Juan: " + null
+	T_10:= null + null
 	OUT T_10
 goto L_4
 L_5:
