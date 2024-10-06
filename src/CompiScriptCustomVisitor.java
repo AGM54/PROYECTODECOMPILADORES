@@ -1552,4 +1552,36 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
+    public HashMap<String,Map<String,Object>> getFusedSymbolTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
+        scopedSymbolTable.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if(scope.equals(data.get("scope"))){
+                    fusedST.put(id,data);
+                }
+            });
+        });
+        scopedDeclaredClasses.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if(scope.equals(data.get("scope"))) {
+                    fusedST.put(id,data);
+                }
+            });
+        });
+        scopedDeclaredFunctions.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if(scope.equals(data.get("scope"))){
+                    fusedST.put(id,data);
+                }
+            });
+        });
+        scopedParametersDeclarations.forEach((scope,table)->{
+            table.forEach((id,data)->{
+                if(scope.equals(data.get("scope"))) {
+                    fusedST.put(id,data);
+                }
+            });
+        });
+        return fusedST;
+    }
 }

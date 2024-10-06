@@ -1,9 +1,9 @@
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Objects;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
@@ -19,6 +19,12 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         return "T_" + (tempCounter++);
     }
 
+    //the symbol table fused
+    private HashMap<String, Map<String,Object>> ST ;
+
+    public IntermediateCodeVisitor(HashMap<String, Map<String,Object>> fusedSymbolTable){
+        this.ST = fusedSymbolTable;
+    }
     // Generates a pointer used for referencing an attribute of a class
     // is a place holder for "retrieving the memory direction"
     private String newPointer(){
@@ -32,6 +38,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
     private List<String> instructions = new ArrayList<>();  // To store TAC instructions
 
+    Pattern InstanceRegex = Pattern.compile("Instance@[0-9a-z]+");
     // Method to get the generated TAC instructions
     public List<String> getInstructions() {
         return instructions;
@@ -69,6 +76,8 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             return CurrFatherCall + "::" + ctx.superCall().IDENTIFIER().getText();
         } else if (ctx.getText().equals("this")) {
             return "this";
+        }else if (ctx.instantiation() != null){
+            return visit(ctx.instantiation());
         }
         return "";
     }
@@ -133,13 +142,18 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx) {
         // Capturamos el nombre de la variable que se está declarando
         String varName = ctx.IDENTIFIER().getText();
-
+        currentInstanceName = varName;
+        Object val = visit(ctx.expression());
         // Si es una instanciación, visitamos la expresión para capturar la instancia
-        if (ctx.expression() != null) {
-            currentInstanceName = varName;  // Guardamos el nombre de la instancia
-            visit(ctx.expression());  // Visitamos la expresión
+        Matcher matcher = InstanceRegex.matcher(String.valueOf(val));
+        if(!(matcher.matches())) {
+            if (ctx.expression() != null) {
+                instructions.add("\t".repeat(tabCounter) + varName + ":= " + val);
+            } else {
+                instructions.add("\t".repeat(tabCounter) + "ALLOC " + varName);
+            }
         }
-
+        currentInstanceName = "";
         return null;
     }
     public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
@@ -150,11 +164,16 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             //add the instruction of retrieving it
             if(Objects.equals(ctx.call().getText(), "this")){
                 String pointer = newPointer();
-                instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +CurrClasName + "::" + ctx.IDENTIFIER().getText());
+                instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +"SELF" + " " + ctx.IDENTIFIER().getText());
                 //get the new expression
                 String val = String.valueOf(visit(ctx.assignment()));
                 instructions.add("\t".repeat(tabCounter) + pointer + ":= " + val);
             }
+        }else{
+            //get the new expression
+            String name = ctx.IDENTIFIER().getText();
+            String val = String.valueOf(visit(ctx.assignment()));
+            instructions.add("\t".repeat(tabCounter) + name + ":= " + val);
         }
         return null;
     }
@@ -289,6 +308,9 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         //add the parameters
         tabCounter ++;
+        if(!CurrClasName.isBlank()){
+            instructions.add("\t".repeat(tabCounter) + "PARAM SELF");
+        }
         if (ctx.parameters() != null){
             for (int i = 0; i < ctx.parameters().getChildCount(); i+=2){
                 String param = String.valueOf(ctx.parameters().getChild(i).getText());
@@ -308,49 +330,112 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
         // Verificamos si estamos trabajando con una instancia de "new"
-        if (ctx.primary().instantiation() != null) {
-            // Obtenemos el nombre de la clase que estamos instanciando
-            String className = ctx.primary().instantiation().IDENTIFIER().getText();
-
-            // Usamos el nombre de la instancia almacenado en currentInstanceName
-            String instanceName = currentInstanceName;
-
-            // Manejamos los argumentos (parámetros pasados al constructor)
-            CompiScriptParser.ArgumentsContext arguments = ctx.primary().instantiation().arguments();
-            if (arguments != null) {
-                for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
-                    String arg = String.valueOf(visit(arguments.getChild(i)));
-                    instructions.add("\t".repeat(tabCounter) + "PARAM " + arg);  // Pushea cada argumento
+        if (ctx.getChildCount() == 1) { //primary call
+            if (ctx.primary() != null) {
+                if (ctx.primary().array() != null) { // is an array (somehow)
+                    return visit(ctx.primary().array());
+                } else { //just a primary
+                    return visit(ctx.primary());
                 }
             }
-
-            // Generamos la instrucción de ALLOCATE para reservar memoria para el objeto
-            instructions.add("\t".repeat(tabCounter) + "ALLOCATE " + instanceName);
-
-            // Llamada al constructor con la clase especificada
-            instructions.add("\t".repeat(tabCounter) + "CALL " + className + "::init");
-
-            return instanceName;  // Retorna el nombre de la instancia
         }
 
         // Si no es una instancia de "new", manejamos una llamada regular
         String primary = String.valueOf(visit(ctx.primary()));
+        if(primary.equals("this")){
+            //return the pointer that will have the information loaded
+            String pointer = newPointer();
+            instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +"SELF"+ " " + ctx.IDENTIFIER().getFirst().getText());
+            return pointer;
+        }
+        if (ST.containsKey(primary)) {
+            Object typePrimary = ST.get(primary).getOrDefault("type", null);
+            if (typePrimary == null) return null;
+            if(typePrimary instanceof  Function){
+                // Si hay argumentos en la llamada
+                if(ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                    CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                    for (int i = 0; i < arguments.getChildCount(); i += 2) {
+                        String arg = String.valueOf(visit(arguments.getChild(i)));
+                        instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);
+                    }
+                }
+                instructions.add("\t".repeat(tabCounter) + "CALL "+ primary);
+            }
+            else if (typePrimary instanceof Instance) {
+                Object lastDeclaration = (Instance) ST.get(primary).get("type"); //contiene info del nombre de la variable que es la instancia;
+                int i = 1;
+                while (i < ctx.getChildCount()) {
+                    if (ctx.getChild(i).getText().equals(".") ||
+                            ctx.getChild(i).getText().equals(")") ||
+                            ctx.getChild(i).getText().equals("[") ||
+                            ctx.getChild(i).getText().equals("(") ||
+                            ctx.getChild(i).getText().equals("]")
+                    ) {//the Identifier is the next one so continue
+                        i++;
+                        continue;
+                    }
+                    if (lastDeclaration instanceof Instance) {
+                        //get the next Identifier
+                        String attr = ((Instance) lastDeclaration).getLookUpName() +
+                                "." + ctx.getChild(i).getText();
+                        String method = ((Instance) lastDeclaration).getClasName() +
+                                "." + ctx.getChild(i).getText();
+                        if (ST.containsKey(attr)) { // is an attribute
+                            lastDeclaration = ST.get(attr).get("type");
+                            //load it into a pointer
+                            String pointer = newPointer();
+                            instructions.add(
+                                    "\t".repeat(tabCounter) + "LOAD "
+                                            + pointer + " " + attr.replace("."," "));
+                        } else if (ST.containsKey(method)) {//is a method
 
-        // Si hay argumentos en la llamada
+                            instructions.add("\t".repeat(tabCounter) + "PUSH " + ((Instance) lastDeclaration).getLookUpName());
+                            Method methodObj = (Method) ST.get(method).get("type");
+                            String methodName = ctx.getChild(i).getText();
+                            i += 2; //skip the opening brackets
+                            while (!ctx.getChild(i).getText().equals(")")) {
+                                String arg = String.valueOf(visit(ctx.getChild(i)));
+                                instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);
+                                i++;
+                            }
+                            instructions.add("\t".repeat(tabCounter) +
+                                    "CALL " + method.replace(".", "::")
+                            );
+                            //lastDeclaration = visitChildren(((Method)ST.get(method).get("type")).getCtx());
+                        }
+                    }
+                    i++;
+                }
+            }
+        }
+        return null;
+    }
+    //new instance
+    @Override
+    public Object visitInstantiation(CompiScriptParser.InstantiationContext ctx) {
+        // Obtenemos el nombre de la clase que estamos instanciando
+        String className = ctx.IDENTIFIER().getText();
+
+        // Usamos el nombre de la instancia almacenado en currentInstanceName
+        String instanceName = currentInstanceName;
+        // Generamos la instrucción de ALLOCATE para reservar memoria para el objeto
+        instructions.add("\t".repeat(tabCounter) + "ALLOC " + instanceName);
+        instructions.add("\t".repeat(tabCounter) + "PUSH " + instanceName);
+        // Manejamos los argumentos (parámetros pasados al constructor)
+
         if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
-            CompiScriptParser.ArgumentsContext arguments = ctx.arguments().get(0);  // Primer set de argumentos
+            CompiScriptParser.ArgumentsContext arguments = ctx.arguments();  // Primer set de argumentos
             for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
                 String arg = String.valueOf(visit(arguments.getChild(i)));
-                instructions.add("\t".repeat(tabCounter) + "PARAM " + arg);  // Pushea cada argumento
+                instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);  // Pushea cada argumento
             }
         }
 
-        // Generamos la llamada a la función
-        instructions.add("\t".repeat(tabCounter) + "CALL " + primary);
-
-        return null;  // No devolvemos nada porque es una llamada a función regular
+        // Llamada al constructor con la clase especificada
+        instructions.add("\t".repeat(tabCounter) + "CALL " + className + "::init");
+        return new Instance("",className);
     }
-
     // Visit comparison (==, !=, >, <, >=, <=)
     @Override
     public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
