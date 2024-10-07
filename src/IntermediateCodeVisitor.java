@@ -326,7 +326,16 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
-
+    @Override
+    public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx){
+        if (ctx.expression() != null){
+            Object val = String.valueOf(visit(ctx.expression()));
+            instructions.add("\t".repeat(tabCounter) +"RETURN " + val) ;
+            return val;
+        }
+            instructions.add("\t".repeat(tabCounter) +"RETURN");
+        return null;
+    }
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
         // Verificamos si estamos trabajando con una instancia de "new"

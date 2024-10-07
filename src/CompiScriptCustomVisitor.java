@@ -593,6 +593,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
+
     //anonimous function block
     @Override
     public Object visitFunAnon(CompiScriptParser.FunAnonContext ctx){

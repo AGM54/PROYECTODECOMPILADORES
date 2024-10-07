@@ -6,40 +6,48 @@ FUN Busqueda::obtenerValorEnIndice
 	PARAM indice
 	T_0:= indice == 0
 	ifFalse T_0 goto L_0
+		RETURN 1
 		goto L_1
 	L_0:
 	L_1:
 	T_1:= indice == 1
 	ifFalse T_1 goto L_2
+		RETURN 3
 		goto L_3
 	L_2:
 	L_3:
 	T_2:= indice == 2
 	ifFalse T_2 goto L_4
+		RETURN 5
 		goto L_5
 	L_4:
 	L_5:
 	T_3:= indice == 3
 	ifFalse T_3 goto L_6
+		RETURN 7
 		goto L_7
 	L_6:
 	L_7:
 	T_4:= indice == 4
 	ifFalse T_4 goto L_8
+		RETURN 9
 		goto L_9
 	L_8:
 	L_9:
 	T_5:= indice == 5
 	ifFalse T_5 goto L_10
+		RETURN 11
 		goto L_11
 	L_10:
 	L_11:
 	T_6:= indice == 6
 	ifFalse T_6 goto L_12
+		RETURN 13
 		goto L_13
 	L_12:
 	L_13:
 	T_7:= - 1
+	RETURN T_7
 ENDFUN
 FUN Busqueda::busquedaBinaria
 	PARAM SELF
@@ -55,20 +63,24 @@ FUN Busqueda::busquedaBinaria
 		valorMedio:= P_0
 		T_11:= valorMedio == objetivo
 		ifFalse T_11 goto L_16
+			RETURN medio
 			goto L_17
 		L_16:
 		L_17:
 		T_12:= valorMedio > objetivo
 		ifFalse T_12 goto L_18
 			LOAD P_1 SELF busquedaBinaria
+			RETURN P_1
 			goto L_19
 		L_18:
 		L_19:
 		LOAD P_2 SELF busquedaBinaria
+		RETURN P_2
 		goto L_15
 	L_14:
 	L_15:
 	T_13:= - 1
+	RETURN T_13
 ENDFUN
 ALLOC buscador
 PUSH buscador
