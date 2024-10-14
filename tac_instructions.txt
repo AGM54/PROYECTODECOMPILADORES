@@ -1,20 +1,77 @@
-FUN factorial
-	PARAM n
-	T_0:= n <= 1
-	ifFalse T_0 goto L_0
-		goto L_1
-	L_0:
-		T_1:= n - 1
-		PUSH T_1
-		CALL factorial P_0
-		T_2:= n * P_0
-	L_1:
+FUN Persona::init
+	PARAM SELF
+	PARAM nombre
+	PARAM edad
+	LOAD P_0 SELF nombre
+	P_0:= nombre
+	LOAD P_1 SELF edad
+	P_1:= edad
+	LOAD P_2 SELF color
+	P_2:= "rojo"
 ENDFUN
-numero:= 5
-PUSH numero
-CALL factorial P_1
-resultado:= P_1
-T_3:= "El factorial de " + numero
-T_4:= T_3 + "es: "
-T_5:= T_4 + resultado
-OUT T_5
+FUN Persona::saludar
+	PARAM SELF
+	LOAD P_3 SELF color
+	T_0:= "Hola, mi nombre es " + P_3
+	OUT T_0
+ENDFUN
+FUN Estudiante::init
+	PARAM SELF
+	PARAM nombre
+	PARAM edad
+	PARAM grado
+	LOAD P_4 SELF grado
+	P_4:= grado
+ENDFUN
+FUN Estudiante::estudiar
+	PARAM SELF
+	LOAD P_5 SELF nombre
+	T_1:= P_5 + " esta estudiando en "
+	LOAD P_6 SELF grado
+	T_2:= T_1 + P_6
+	T_3:= T_2 + " grado."
+	OUT T_3
+ENDFUN
+nombre:= "Erick"
+ALLOC ropero
+PUSH ropero
+PUSH nombre
+PUSH 20
+CALL Persona::init
+ALLOC juan
+PUSH juan
+PUSH nombre
+PUSH 20
+PUSH 3
+CALL Estudiante::init
+PUSH juan
+CALL Estudiante::saludar 
+PUSH juan
+CALL Estudiante::estudiar 
+i:= 1
+L_0:
+T_4:= i <= 5
+ifFalse T_4 goto L_1
+	T_5:= i % 2
+	T_6:= T_5 == 0
+	ifFalse T_6 goto L_2
+		T_7:= i + " es par"
+		OUT T_7
+		goto L_3
+	L_2:
+		T_8:= i + " es impar"
+		OUT T_8
+	L_3:
+T_9:= i + 1
+i:= T_9
+goto L_0
+L_1:
+L_4:
+LOAD P_7 juan edad
+T_10:= P_7 < 25
+ifFalse T_10 goto L_5
+	LOAD P_8 juan edad
+	T_11:= "Edad de Juan: " + P_8
+	OUT T_11
+goto L_4
+L_5:

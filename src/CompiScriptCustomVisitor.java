@@ -525,10 +525,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
         }
         Object returner = visitChildren(ctx);
-        if (CurrClasName.isEmpty()){
-            ((Function) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
-        }else{
-            ((Method) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
+        if (returner!=null) {
+            if (CurrClasName.isEmpty()) {
+                ((Function) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
+            } else {
+                ((Method) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
+            }
         }
         CurrFuncName = "";
         // Pop the Scope after processing
