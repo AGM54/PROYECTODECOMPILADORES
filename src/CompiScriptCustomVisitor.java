@@ -795,6 +795,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             if (primary instanceof Instance){
                 Object lastDeclaration = (Instance)primary; //contiene info del nombre de la variable que es la instancia;
                 int i = 1;
+                int argspointer = 0;
                 while(i < ctx.getChildCount()){
                     if(ctx.getChild(i).getText().equals(".") ||
                             ctx.getChild(i).getText().equals(")") ||
@@ -829,9 +830,15 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                             List<String> requParams = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(method).get("params");
                             List<Object> receivedParams = new ArrayList<>();
                             while(!ctx.getChild(i).getText().equals(")")){
-                                receivedParams.add(visit(ctx.getChild(i)));
                                 i++;
                             }
+                            if(ctx.arguments() != null && !ctx.arguments().isEmpty()){
+                                CompiScriptParser.ArgumentsContext arguments = ctx.arguments().get(argspointer);
+                                for(int j= 0; j <arguments.getChildCount() ; j+=2){
+                                    receivedParams.add(visit(arguments.getChild(j)));
+                                }
+                            }
+                            argspointer++;
                             if(requParams==null && receivedParams.size() > 0){
                                 throw new RuntimeException("Error: " +method + " requieres " + 0
                                         + " parameters ," + receivedParams.size() + " found");

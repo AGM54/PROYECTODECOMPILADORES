@@ -1,42 +1,30 @@
-class Persona {
-  init(nombre, edad) {
-    this.nombre = nombre;
-    this.edad = edad;
-    this.color = "rojo";
+class CajaRegistradora {
+  init(impuesto) {
+    this.impuesto = impuesto;
+    this.total = 0;
   }
 
-  saludar() {
-    print "Hola, mi nombre es " + this.color;
-  }
-}
-
-class Estudiante extends Persona {
-  init(nombre, edad, grado) {
-    super.init(nombre, edad);
-    this.grado = grado;
+  agregarProducto(precio) {
+    this.total = this.total + precio;
+    print "Producto añadido con precio: " + precio;
   }
 
-  estudiar() {
-    print this.nombre + " esta estudiando en " + this.grado + " grado.";
+  calcularTotalConImpuesto() {
+    var totalConImpuesto = this.total + (this.total * this.impuesto / 100);
+    print "El total con impuesto es: " + totalConImpuesto;
+    return totalConImpuesto;
   }
-}
 
-var nombre = "Erick";
-
-var ropero = new Persona(nombre, 20);
-var juan = new Estudiante(nombre, 20, 3);
-juan.saludar();    // Salida: Hola, mi nombre es Juan
-juan.estudiar();   // Salida: Juan esta estudiando en 3 grado
-
-for (var i = 1; i <= 5; i = i + 1) {
-  if (i % 2 == 0) {
-    print i + " es par";
-  } else {
-    print i + " es impar";
+  reiniciar() {
+    this.total = 0;
+    print "La caja registradora se ha reiniciado.";
   }
 }
 
-while (juan.edad < 25) {
-  juan.edad = juan.edad + 1;
-  print "Edad de Juan: " + juan.edad;
-}
+// Uso de la caja registradora
+var caja = new CajaRegistradora(12);
+caja.agregarProducto(100);
+caja.agregarProducto(50);
+caja.agregarProducto(25);
+caja.calcularTotalConImpuesto();
+caja.reiniciar();
