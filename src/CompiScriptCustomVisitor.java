@@ -726,31 +726,164 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     return new Param();
                 }
             }
-            if (primary instanceof  ThisDirective){
-                if (CurrClasName.isBlank()){
+            if (primary instanceof  ThisDirective) {
+                if (CurrClasName.isBlank()) {
                     throw new RuntimeException("No class found for usage of 'this' call");
-                }else if(!instanceCall.isBlank()){
-                    String attr = instanceCall+'.'+ctx.IDENTIFIER().getFirst().getText();
+                } else if (!instanceCall.isBlank()) {
+                    String attr = instanceCall + '.' + ctx.IDENTIFIER().getFirst().getText();
                     return scopedSymbolTable.get(ScopesStack.peek()).get(attr).get("type");
-                }
-                else{
-                    if(ctx.IDENTIFIER() !=null){
-                        if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())){
-                            returner =  scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
-                        }else{
-                            //check on the old scope if it exists
-                            String actual = ScopesStack.pop(); //remove the actual
-                            if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())){
-                                returner =  scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
-                                //if it does, push it also into the actual
-                                Map<String,Object> att = scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText());
-                                ScopesStack.push(actual);
-                                scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText(),att);
-                            }else {
-                                throw new RuntimeException("Error : " + CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText() + " is not defined");}
+                } else {
+                    if (ctx.IDENTIFIER() != null) {
+                        if (scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())) {
+                            returner = scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
                         }
-                    }else{
-                        throw new RuntimeException("cant call a blank attribute");
+                        else if (scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())) {
+                            if(!( CurrFuncName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())|| currCallName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()))) {
+                                //just check if the parameters are well received and no errors when calling it
+                                Method currMethod = (Method) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
+                                currCallName = CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText();
+                                List<String> requParams = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(currCallName).get("params");
+                                List<Object> receivedParams = new ArrayList<>();
+                                if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                                    CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                                    for (int i = 0; i < arguments.getChildCount(); i += 2) {
+                                        receivedParams.add(visit(arguments.getChild(i)));
+                                    }
+                                }
+
+                                if (requParams != null && requParams.size() != receivedParams.size()) {
+                                    throw new RuntimeException("Error: " + currCallName + " requieres " + (requParams == null ? 0 : requParams.size())
+                                            + " parameters " + receivedParams.size() + " found");
+                                }
+                                if (requParams != null) { //avoid calling recursively because a loop
+                                    // Create new symbol tables for the new scope
+                                    // Populate new symbol tables from the existing scope
+                                    Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                    Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                    Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                    Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                    // Insert new scope into the symbol table maps
+                                    String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                    scopedDeclaredFunctions.put(newScope, functMap);
+                                    scopedSymbolTable.put(newScope, symbolMap);
+                                    scopedDeclaredClasses.put(newScope, classMap);
+                                    scopedParametersDeclarations.put(newScope, paramMap);
+                                    // Push the new Scope into the stack
+                                    ScopesStack.push(newScope);
+                                    //push the parameters into the scope
+                                    for (int i = 0; i < requParams.size(); i++) {
+                                        String paramName = requParams.get(i).toString();
+                                        Object type = receivedParams.get(i);
+                                        if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(paramName)) {
+                                            scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
+                                                    new HashMap<>() {{
+                                                        put("type", new Param() {{
+                                                            setTypeInstnce(type);
+                                                        }});
+                                                        put("scope", ScopesStack.peek());
+                                                    }});
+                                        } else {
+                                            Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
+                                            if (paramI.getTypeInstnce() == null && currCallName.isEmpty()) {
+                                                throw new RuntimeException("Error : Parameter " + paramName + " is already declared ");
+                                            }
+                                        }
+                                    }
+                                }
+                                returner = visitChildren(currMethod.getCtx());
+                                ScopesStack.pop();
+                                currCallName = "";
+                            }
+                            else if ( CurrFuncName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()) || currCallName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())){
+                                if(!CurrFuncName.isEmpty()){
+                                    //add the recursive flag
+                                    ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                                }
+                                return new Param();
+                            }
+                        }
+                        else {
+                                //check on the old scope if it exists
+                                String actual = ScopesStack.pop(); //remove the actual
+                                if (scopedSymbolTable.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())) {
+                                    returner = scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
+                                    //if it does, push it also into the actual
+                                    Map<String, Object> att = scopedSymbolTable.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText());
+                                    ScopesStack.push(actual);
+                                    scopedSymbolTable.get(ScopesStack.peek()).put(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText(), att);
+                                } else if(scopedDeclaredFunctions.get(ScopesStack.peek()).containsKey(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())) {
+                                    //just check if the parameters are well received and no errors when calling it
+                                    if(!( CurrFuncName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()) || currCallName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()))) {
+                                        if(!(currCallName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()))) {
+                                        Method currMethod = (Method) scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()).get("type");
+                                        currCallName = CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText();
+                                        List<String> requParams = (List<String>) scopedDeclaredFunctions.get(ScopesStack.peek()).get(currCallName).get("params");
+                                        List<Object> receivedParams = new ArrayList<>();
+                                        if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                                            CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                                            for (int i = 0; i < arguments.getChildCount(); i += 2) {
+                                                receivedParams.add(visit(arguments.getChild(i)));
+                                            }
+                                        }
+
+                                        if (requParams != null && requParams.size() != receivedParams.size()) {
+                                            throw new RuntimeException("Error: " + currCallName + " requieres " + (requParams == null ? 0 : requParams.size())
+                                                    + " parameters " + receivedParams.size() + " found");
+                                        }
+                                        if (requParams != null) { //avoid calling recursively because a loop
+                                            // Create new symbol tables for the new scope
+                                            // Populate new symbol tables from the existing scope
+                                            Map<String, Map<String, Object>> functMap = new HashMap<>(scopedDeclaredFunctions.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                            Map<String, Map<String, Object>> symbolMap = new HashMap<>(scopedSymbolTable.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                            Map<String, Map<String, Object>> classMap = new HashMap<>(scopedDeclaredClasses.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                            Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
+                                            // Insert new scope into the symbol table maps
+                                            String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                            scopedDeclaredFunctions.put(newScope, functMap);
+                                            scopedSymbolTable.put(newScope, symbolMap);
+                                            scopedDeclaredClasses.put(newScope, classMap);
+                                            scopedParametersDeclarations.put(newScope, paramMap);
+                                            // Push the new Scope into the stack
+                                            ScopesStack.push(newScope);
+                                            //push the parameters into the scope
+                                            for (int i = 0; i < requParams.size(); i++) {
+                                                String paramName = requParams.get(i).toString();
+                                                Object type = receivedParams.get(i);
+                                                if (!scopedParametersDeclarations.get(ScopesStack.peek()).containsKey(paramName)) {
+                                                    scopedParametersDeclarations.get(ScopesStack.peek()).put(paramName,
+                                                            new HashMap<>() {{
+                                                                put("type", new Param() {{
+                                                                    setTypeInstnce(type);
+                                                                }});
+                                                                put("scope", ScopesStack.peek());
+                                                            }});
+                                                } else {
+                                                    Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
+                                                    if (paramI.getTypeInstnce() == null && currCallName.isEmpty()) {
+                                                        throw new RuntimeException("Error : Parameter " + paramName + " is already declared ");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        returner = visitChildren(currMethod.getCtx());
+                                        ScopesStack.pop();
+                                        currCallName = "";
+                                        }
+                                        else if ( CurrFuncName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText()) || currCallName.equals(CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText())) {
+                                            if(!CurrFuncName.isEmpty()){
+                                                //add the recursive flag
+                                                ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                                            }
+                                            return new Param();
+                                        }
+                                    }
+                                    else{
+                                    throw new RuntimeException("Error : " + CurrClasName + '.' + ctx.IDENTIFIER().getFirst().getText() + " is not defined");
+                                }
+                            }
+                        }
+                    }else {
+                        throw new RuntimeException("this directive is not comleted");
                     }
                 }
             }
@@ -935,10 +1068,13 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }else{
             Map<String,Object> funcMap = scopedDeclaredFunctions.get(ScopesStack.peek()).get(ctx.IDENTIFIER().getText() +".init");
             Object args = funcMap.getOrDefault("params",null);
+            List<CompiScriptParser.ExpressionContext> received = new ArrayList<>();
             if(args != null) {
                 List<Object> params = new ArrayList<>((Collection) args);
-                List<CompiScriptParser.ExpressionContext> received = (List<CompiScriptParser.ExpressionContext>) visit(ctx.arguments());
-                if(ctx.arguments() == null || params.size() !=  received.size()) {
+                if(ctx.arguments() !=  null){
+                    received = (List<CompiScriptParser.ExpressionContext>) visit(ctx.arguments());
+                }
+                if(params.size() !=  received.size()) {
                     throw new RuntimeException("Error : " + ctx.IDENTIFIER().getText() + " expected "
                             + params.size()  + " arguments " + (ctx.arguments() == null ? " none" : received.size())
                             + " were given");
