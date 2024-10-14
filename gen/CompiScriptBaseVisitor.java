@@ -1,4 +1,4 @@
-// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from C:/Users/marce/Desktop/PROYECTODECOMPILADORES-experimental/src/CompiScript.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.tree.AbstractParseTreeVisitor;
 
 /**
@@ -193,6 +193,13 @@ public class CompiScriptBaseVisitor<T> extends AbstractParseTreeVisitor<T> imple
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
 	@Override public T visitCall(CompiScriptParser.CallContext ctx) { return visitChildren(ctx); }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation returns the result of calling
+	 * {@link #visitChildren} on {@code ctx}.</p>
+	 */
+	@Override public T visitSuperCall(CompiScriptParser.SuperCallContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *

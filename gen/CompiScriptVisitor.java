@@ -1,4 +1,4 @@
-// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from C:/Users/marce/Desktop/PROYECTODECOMPILADORES-experimental/src/CompiScript.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.tree.ParseTreeVisitor;
 
 /**
@@ -165,6 +165,12 @@ public interface CompiScriptVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitCall(CompiScriptParser.CallContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSuperCall(CompiScriptParser.SuperCallContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link CompiScriptParser#primary}.
 	 * @param ctx the parse tree

@@ -1,12 +1,30 @@
-class TOP{
-    funInTop(){
-        a = 2;
-        class bottom{
-            funInBottomInsideFunTopInsideTOP(){
-                var a = 0;
-            }
-        }
-    }
+class CajaRegistradora {
+  init(impuesto) {
+    this.impuesto = impuesto;
+    this.total = 0;
+  }
+
+  agregarProducto(precio) {
+    this.total = this.total + precio;
+    print "Producto añadido con precio: " + precio;
+  }
+
+  calcularTotalConImpuesto() {
+    var totalConImpuesto = this.total + (this.total * this.impuesto / 100);
+    print "El total con impuesto es: " + totalConImpuesto;
+    return totalConImpuesto;
+  }
+
+  reiniciar() {
+    this.total = 0;
+    print "La caja registradora se ha reiniciado.";
+  }
 }
-TOP.funInTop(2);
-print a;
+
+// Uso de la caja registradora
+var caja = new CajaRegistradora(12);
+caja.agregarProducto(100);
+caja.agregarProducto(50);
+caja.agregarProducto(25);
+caja.calcularTotalConImpuesto();
+caja.reiniciar();

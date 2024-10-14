@@ -33,6 +33,9 @@ public class Main {
             CompiScriptCustomVisitor visitor = new CompiScriptCustomVisitor();
             visitor.visit(tree);
             visitor.printSymbols();
+            IntermediateCodeVisitor icVisitor = new IntermediateCodeVisitor(visitor.getFusedSymbolTable());
+            icVisitor.visit(tree);
+            icVisitor.writeToFile("tac_instructions.txt");
         } catch (IOException e) {
             e.printStackTrace();
         }

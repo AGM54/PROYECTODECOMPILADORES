@@ -48,9 +48,11 @@ unary           : ( '!' | '-' ) unary
 
 call            : primary ( '(' arguments? ')' | '.' IDENTIFIER | '[' expression ']')*;
 
+superCall       :      'super' '.' IDENTIFIER;
+
 primary         : 'true' | 'false' | 'nil' | 'this'
                 | NUMBER | STRING | IDENTIFIER | '(' expression ')'
-                | 'super' '.' IDENTIFIER
+                | superCall
                 | array | instantiation;
 
 function        : IDENTIFIER '(' parameters? ')' block ;

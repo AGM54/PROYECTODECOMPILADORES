@@ -1,0 +1,53 @@
+FUN CajaRegistradora::init
+	PARAM SELF
+	PARAM impuesto
+	LOAD P_0 SELF impuesto
+	P_0:= impuesto
+	LOAD P_1 SELF total
+	P_1:= 0
+ENDFUN
+FUN CajaRegistradora::agregarProducto
+	PARAM SELF
+	PARAM precio
+	LOAD P_2 SELF total
+	LOAD P_3 SELF total
+	T_0:= P_3 + precio
+	P_2:= T_0
+	T_1:= "Producto añadido con precio: " + precio
+	OUT T_1
+ENDFUN
+FUN CajaRegistradora::calcularTotalConImpuesto
+	PARAM SELF
+	LOAD P_4 SELF total
+	LOAD P_5 SELF total
+	LOAD P_6 SELF impuesto
+	T_2:= P_5 * P_6
+	T_3:= T_2 / 100
+	T_4:= P_4 + T_3
+	totalConImpuesto:= T_4
+	T_5:= "El total con impuesto es: " + totalConImpuesto
+	OUT T_5
+ENDFUN
+FUN CajaRegistradora::reiniciar
+	PARAM SELF
+	LOAD P_7 SELF total
+	P_7:= 0
+	OUT "La caja registradora se ha reiniciado."
+ENDFUN
+ALLOC caja
+PUSH caja
+PUSH 12
+CALL CajaRegistradora::init
+PUSH caja
+PUSH 100
+CALL CajaRegistradora::agregarProducto 
+PUSH caja
+PUSH 50
+CALL CajaRegistradora::agregarProducto 
+PUSH caja
+PUSH 25
+CALL CajaRegistradora::agregarProducto 
+PUSH caja
+CALL CajaRegistradora::calcularTotalConImpuesto 
+PUSH caja
+CALL CajaRegistradora::reiniciar 

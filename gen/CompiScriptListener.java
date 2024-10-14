@@ -1,4 +1,4 @@
-// Generated from E:/Universidad/2024/COMPILERS2-THE-REVENGE/PROYECTODECOMPILADORES/src/CompiScript.g4 by ANTLR 4.13.1
+// Generated from C:/Users/marce/Desktop/PROYECTODECOMPILADORES-experimental/src/CompiScript.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
 /**
@@ -266,6 +266,16 @@ public interface CompiScriptListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitCall(CompiScriptParser.CallContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 */
+	void enterSuperCall(CompiScriptParser.SuperCallContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link CompiScriptParser#superCall}.
+	 * @param ctx the parse tree
+	 */
+	void exitSuperCall(CompiScriptParser.SuperCallContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link CompiScriptParser#primary}.
 	 * @param ctx the parse tree
