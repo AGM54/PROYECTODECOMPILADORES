@@ -9,6 +9,7 @@ import java.util.*;
 class Function {
     private  String funName;
     private Boolean isRecursive = false;
+    private Object returnsType = null;
     public Function(String funName){
         this.funName = funName;
     }
@@ -30,6 +31,12 @@ class Function {
     }
     public Boolean getIsRecursive(){
         return isRecursive;
+    }
+    public void setReturnsType(Object returnsType){
+        this.returnsType = returnsType;
+    }
+    public Object getReturnsType(){
+        return this.returnsType;
     }
 } //a function
 class Class {} // a class , no rocket science
@@ -436,6 +443,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         String functionName = currInstanceOf.isBlank()? ctx.IDENTIFIER().getText() : currInstanceOf + '.' + ctx.IDENTIFIER().getText() ;
         HashMap<String,Object> functMap = new HashMap<>();
         functMap.put("params",new ArrayList<>());
+        String originalScope = ScopesStack.peek();
         if(ctx.parameters() != null) {
             List<String> parameters = new ArrayList<>();
             for (TerminalNode param : ctx.parameters().IDENTIFIER()) {
@@ -516,10 +524,16 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
-        visitChildren(ctx);
+        Object returner = visitChildren(ctx);
+        if (CurrClasName.isEmpty()){
+            ((Function) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
+        }else{
+            ((Method) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
+        }
         CurrFuncName = "";
         // Pop the Scope after processing
         String lastScope = ScopesStack.pop();
+
         //if its inside a var declaration or a class declaration recover all the declared stuff and bring back
         if(!CurrClasName.isBlank()) {
             List<Map<String, Map<String, Object>>> lastDeclaredSymbols = findFromOnTable(CurrClasName + '.', scopedSymbolTable, lastScope);

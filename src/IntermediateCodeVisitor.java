@@ -360,10 +360,13 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                         instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);
                     }
                 }
-                instructions.add("\t".repeat(tabCounter) + "CALL "+ primary);
+                String pointer = newPointer();
+                instructions.add("\t".repeat(tabCounter) + "CALL "+ primary + " " + pointer);
+                return pointer;
             }
             else if (typePrimary instanceof Instance) {
                 Object lastDeclaration = (Instance) ST.get(primary).get("type"); //contiene info del nombre de la variable que es la instancia;
+                String lastPointer  = "";
                 int i = 1;
                 while (i < ctx.getChildCount()) {
                     if (ctx.getChild(i).getText().equals(".") ||
@@ -381,15 +384,15 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                                 "." + ctx.getChild(i).getText();
                         String method = ((Instance) lastDeclaration).getClasName() +
                                 "." + ctx.getChild(i).getText();
+
                         if (ST.containsKey(attr)) { // is an attribute
                             lastDeclaration = ST.get(attr).get("type");
                             //load it into a pointer
-                            String pointer = newPointer();
+                            lastPointer = newPointer();
                             instructions.add(
                                     "\t".repeat(tabCounter) + "LOAD "
-                                            + pointer + " " + attr.replace("."," "));
+                                            + lastPointer + " " + attr.replace("."," "));
                         } else if (ST.containsKey(method)) {//is a method
-
                             instructions.add("\t".repeat(tabCounter) + "PUSH " + ((Instance) lastDeclaration).getLookUpName());
                             Method methodObj = (Method) ST.get(method).get("type");
                             String methodName = ctx.getChild(i).getText();
@@ -400,13 +403,15 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                                 i++;
                             }
                             instructions.add("\t".repeat(tabCounter) +
-                                    "CALL " + method.replace(".", "::")
+                                    "CALL " + method.replace(".", "::") + " " + lastPointer
                             );
-                            //lastDeclaration = visitChildren(((Method)ST.get(method).get("type")).getCtx());
+
+                            lastDeclaration = ((Method)ST.get(method).get("type")).getReturnsType();
                         }
                     }
                     i++;
                 }
+                return lastPointer;
             }
         }
         return null;
