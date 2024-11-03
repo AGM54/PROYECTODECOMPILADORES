@@ -1,5 +1,7 @@
 class Busqueda {
-  init() {}
+  init() {
+    this.a = "a";
+  }
 
   // Función que retorna valores con base en un índice
   obtenerValorEnIndice(indice) {
@@ -37,4 +39,4 @@ class Busqueda {
 var buscador = new Busqueda();
 var objetivo = 7;
 var indice = buscador.busquedaBinaria(0, 6, objetivo);
-print "El elemento " + objetivo + " está en el índice: " + indice;
+print "El elemento " + objetivo + " está en el índice: " + indice;

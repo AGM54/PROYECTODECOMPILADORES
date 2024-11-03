@@ -33,9 +33,14 @@ public class Main {
             CompiScriptCustomVisitor visitor = new CompiScriptCustomVisitor();
             visitor.visit(tree);
             visitor.printSymbols();
-            IntermediateCodeVisitor icVisitor = new IntermediateCodeVisitor(visitor.getFusedSymbolTable());
+            IntermediateCodeVisitor icVisitor = new IntermediateCodeVisitor(
+                    visitor.getFusedSymbolTable(),
+                    visitor.getFusedFunctionsTable(),
+                    visitor.getFusedClassTable(),
+                    visitor.getFusedParametersTable());
             icVisitor.visit(tree);
-            icVisitor.writeToFile("tac_instructions.txt");
+
+            icVisitor.writeToFile("tac_instructions_V2.txt");
         } catch (IOException e) {
             e.printStackTrace();
         }

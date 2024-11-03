@@ -85,11 +85,15 @@ ENDFUN
 ALLOC buscador
 PUSH buscador
 CALL Busqueda::init
+POP buscador
 objetivo:= 7
 PUSH buscador
+POP buscador
 PUSH objetivo
-CALL Busqueda::busquedaBinaria 
-indice:= 
+CALL Busqueda::busquedaBinaria P_3
+POP buscador
+POP objetivo
+indice:= P_3
 T_14:= "El elemento " + objetivo
 T_15:= T_14 + " está en el índice: "
 T_16:= T_15 + indice

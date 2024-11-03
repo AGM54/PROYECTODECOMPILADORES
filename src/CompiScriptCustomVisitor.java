@@ -1721,6 +1721,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             });
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedClassTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedDeclaredClasses.forEach((scope,table)->{
             table.forEach((id,data)->{
                 if(scope.equals(data.get("scope"))) {
@@ -1728,6 +1732,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             });
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedFunctionsTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedDeclaredFunctions.forEach((scope,table)->{
             table.forEach((id,data)->{
                 if(scope.equals(data.get("scope"))){
@@ -1735,6 +1743,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             });
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedParametersTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedParametersDeclarations.forEach((scope,table)->{
             table.forEach((id,data)->{
                 if(scope.equals(data.get("scope"))) {
