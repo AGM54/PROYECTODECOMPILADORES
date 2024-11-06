@@ -87,6 +87,9 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
     private String getTempPointer (Object val,Boolean forceLoad){
         if (temporalsMap.containsValue(val)){
             for (Map.Entry<String, Object> entry : temporalsMap.entrySet()) {
+                if(entry.getValue() == null){
+                    continue;
+                }
                 if (entry.getValue().equals(val)) {
                     return entry.getKey();
                 }
@@ -242,6 +245,18 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         }
     }
 
+    private String getStringConstant(String val){
+        if(StringConstants.containsKey(String.valueOf(val))) { //is it a constant string?
+            return StringConstants.get(String.valueOf(val));
+        } //if not, assume is in the buffer space on .data
+        else{
+            if(!hasStringBuffer){ //no string buffer yet? create it
+                hasStringBuffer = true;
+                dataHeader.add("_B_ : .space 200");
+            }
+            return "_B_";
+        }
+    }
     //constructor
     public EnhancedIntermediateCode(
             HashMap<String, Map<String,Object>> fusedSymbolTable,
@@ -317,11 +332,13 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         }else if (ctx.superCall() != null){
             return CurrFatherCall + "_" + ctx.superCall().IDENTIFIER().getText();
         } else if (ctx.getText().equals("this")) {
-            return "this";
+            return new ThisDirective();
         }else if (ctx.instantiation() != null){
             return visit(ctx.instantiation());
+        }else if (ctx.superCall() != null) {
+            return new SuperConstructor(ctx.superCall().getChild(2).getText());
         }
-        return "";
+        return visitChildren(ctx);
     }
 
     @Override
@@ -371,7 +388,7 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
                 if(((Variable) nextFactor).pointer.isBlank()){
                     ((Variable) nextFactor).pointer = getTempPointer(((Variable) nextFactor).name,true);
                     N = ((Variable) nextFactor).pointer;
-                    instructions.add("\t".repeat(tabCounter) + "lw" + ((Variable) nextFactor).pointer +", " + ((Variable) nextFactor).name);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) nextFactor).pointer +", " + ((Variable) nextFactor).name);
                     nextFactor = ((Variable) nextFactor).value;
                 }
             }
@@ -440,7 +457,7 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         if (result instanceof Variable){
             if(((Variable) result).pointer.isBlank()){
                 ((Variable) result).pointer = getTempPointer(((Variable) result).name,true);
-                instructions.add("\t".repeat(tabCounter) + "lw" + ((Variable) result).pointer +", " + ((Variable) result).name);
+                instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) result).pointer +", " + ((Variable) result).name);
             }
         }
 
@@ -451,7 +468,7 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
             if (nextUnary instanceof Variable){
                 if(((Variable) nextUnary).pointer.isBlank()){
                     ((Variable) nextUnary).pointer = getTempPointer(((Variable) nextUnary).name,true);
-                    instructions.add("\t".repeat(tabCounter) + "lw" + ((Variable) nextUnary).pointer +", " + ((Variable) nextUnary).name);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) nextUnary).pointer +", " + ((Variable) nextUnary).name);
                 }
             }
 
@@ -548,6 +565,7 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         currentInstanceName = "";
         return null;
     }
+
     public Object visitAssignment(CompiScriptParser.AssignmentContext ctx){
         if(ctx.logic_or() != null) {
             return visit(ctx.logic_or());
@@ -561,7 +579,11 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
                 //get the new expression
                 Object val = visit(ctx.assignment());
                 if(!String.valueOf(val).startsWith("$")){
-                    instructions.add("\t".repeat(tabCounter) + "li" + " " + pointer + ", " + val);
+                    if (val instanceof String){
+                        instructions.add("\t".repeat(tabCounter) + "la" + " " + pointer + ", " + getStringConstant(String.valueOf(val)));
+                    }else {
+                        instructions.add("\t".repeat(tabCounter) + "li" + " " + pointer + ", " + val);
+                    }
                 }else{
                     instructions.add("\t".repeat(tabCounter) + "move" + " " + pointer + ", " + val);
                 }
@@ -747,7 +769,6 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         tabCounter ++;
         int argsCounter = 0;
         if(!CurrClasName.isBlank()){
-            instructions.add("\t".repeat(tabCounter) + "PARAM SELF");
             argsCounter ++;
         }
 
@@ -814,6 +835,7 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
         hasReturnSmt = true;
         return val;
     }
+
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
         // Verificamos si estamos trabajando con una instancia de "new"
@@ -882,6 +904,10 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
             }
             return "$v0";
         }
+        else if (primary instanceof ThisDirective){
+            String name =CurrClasName + "." + ctx.IDENTIFIER().getFirst().getText();
+
+        }
         return null;
     }
     //new instance
@@ -889,30 +915,64 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
     public Object visitInstantiation(CompiScriptParser.InstantiationContext ctx) {
         // Obtenemos el nombre de la clase que estamos instanciando
         String className = ctx.IDENTIFIER().getText();
-
+        int argsCounter = 0;
+        int stackReserve = 0;
+        ArrayList<String> extraParams = new ArrayList<>();
         // Usamos el nombre de la instancia almacenado en currentInstanceName
         String instanceName = currentInstanceName;
         // Generamos la instrucción de ALLOCATE para reservar memoria para el objeto
         instructions.add("\t".repeat(tabCounter) + "la $a0, " +  instanceName);
+        argsCounter++;
         // Manejamos los argumentos (parámetros pasados al constructor)
 
         if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
             CompiScriptParser.ArgumentsContext arguments = ctx.arguments();  // Primer set de argumentos
             for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
                 Object arg = visit(arguments.getChild(i));
-                instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);  // Pushea cada argumento
+                if (argsCounter < 4){
+                    if(arg instanceof Number || arg instanceof String){
+                        instructions.add("\t".repeat(tabCounter) + "li $a"+ argsCounter+" , "+ arg);
+                    }
+                    if (arg instanceof Variable){
+                        if (((Variable) arg).pointer.isBlank()){
+                            ((Variable) arg).pointer =
+                                    getTempPointer(((Variable) arg).name,true);
+                        }
+                        instructions.add("\t".repeat(tabCounter) + "lw $a"+ argsCounter+" , "+
+                                ((Variable) arg).pointer);
+                        releaseTemp(((Variable) arg).pointer);
+                    }
+                    argsCounter ++;
+                }else{
+                    if (arg instanceof Variable){
+                        if (((Variable) arg).pointer.isBlank()){
+                            ((Variable) arg).pointer =
+                                    getTempPointer(((Variable) arg).name,true);
+                            extraParams.add("\t".repeat(tabCounter) + "lw "+ ((Variable) arg).pointer + " , "+ ((Variable) arg).name);
+                        }
+                        extraParams.add("\t".repeat(tabCounter) + "sw "+ ((Variable) arg).pointer+ " , " + stackReserve+ "($sp)");
+                        stackReserve += calculateSize(((Variable) arg).value);
+                        releaseTemp(((Variable) arg).pointer);
+                    }else{
+                        String temp = newTemp(arg);
+                        extraParams.add("\t".repeat(tabCounter) + "li "+ temp + " , "+ arg);
+                        extraParams.add("\t".repeat(tabCounter) + "sw "+ temp + " , "+ stackReserve+ "($sp)");
+                        stackReserve += calculateSize(arg);
+                        releaseTemp(temp);
+                    }
+                }
             }
         }
 
         // Llamada al constructor con la clase especificada
         instructions.add("\t".repeat(tabCounter) + "jal " + className.toLowerCase() + "_init");
-        instructions.add("\t".repeat(tabCounter) + "POP " + instanceName);
+
         if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
 
         }
         return new Instance("",className);
     }
-    // Visit comparison (==, !=, >, <, >=, <=)
+    // Visit equality (==, !=)
     @Override
     public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
         Object left = visit(ctx.comparison(0));  // Visit the left side of the comparison
@@ -926,18 +986,47 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
             Object right = visit(ctx.comparison(i));
             String lastInstruction = "";
             String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!='
-
+            if (left instanceof Variable){
+                if(((Variable) left).pointer.isBlank()){
+                    ((Variable) left).pointer = getTempPointer(((Variable) left).name,true);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) left).pointer +", "
+                            + ((Variable) result).name);
+                }
+            }
+            if (right instanceof Variable){
+                if(((Variable) right).pointer.isBlank()){
+                    ((Variable) right).pointer = getTempPointer(((Variable) right).name,true);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) right).pointer +", " + ((Variable) right).name);
+                }
+            }
             switch (operator){
                 case "==" -> {
-                    instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  + left +  " " + right + " " + jump);
+                    instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  +
+                            (left instanceof Variable? ((Variable) left).pointer :
+                                    left instanceof Param ? ((Param) left).pointerRef : left ) +  " "
+                            + (right instanceof Variable? ((Variable) right).pointer :
+                            right instanceof Param ? ((Param) right).pointerRef : right ) + " "
+                            + jump);
                     if (!inverseLabel.isBlank()){
-                        instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + left +  " " + right + " " + inverseLabel);
+                        instructions.add("\t".repeat(tabCounter)  + "bne"  + " "
+                                + (left instanceof Variable? ((Variable) left).pointer :
+                                left instanceof Param ? ((Param) left).pointerRef : left )
+                                +  " " + (right instanceof Variable? ((Variable) right).pointer :
+                                right instanceof Param ? ((Param) right).pointerRef : right ) + " " + inverseLabel);
                     }
                 }
                 case "!=" -> {
-                    instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + left +  " " + right + " " + jump);
+                    instructions.add("\t".repeat(tabCounter)  + "bne"  + " "
+                            + (left instanceof Variable? ((Variable) left).pointer :
+                            left instanceof Param ? ((Param) left).pointerRef : left ) +  " "
+                            + (right instanceof Variable? ((Variable) right).pointer :
+                            right instanceof Param ? ((Param) right).pointerRef : right ) + " " + jump);
                     if (!inverseLabel.isBlank()){
-                        instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  + left +  " " + right + " " + inverseLabel);
+                        instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  +
+                                (left instanceof Variable? ((Variable) left).pointer :
+                                left instanceof Param ? ((Param) left).pointerRef : left ) +  " "
+                                + (right instanceof Variable? ((Variable) right).pointer :
+                                right instanceof Param ? ((Param) right).pointerRef : right ) + " " + inverseLabel);
                     }
                 }
             }
@@ -946,12 +1035,10 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
             }
             result = lastInstruction;  // The result becomes the new temporary variable
         }
-        if(String.valueOf(result).startsWith("$t")) {
-            releaseTemp(String.valueOf(result));
-        }
         return result;
     }
 
+    // Visit comparison (>, <, >=, <=)
     @Override
     public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
         Object left = (visit(ctx.term(0)));  // Visit the left side of the comparison
@@ -965,10 +1052,37 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
             String temp = newTemp(0);
             Object right = visit(ctx.term(i));
             String operator = ctx.getChild(2 * i - 1).getText(); //'>' | '>=' | '<' | '<='
-
+            if (left instanceof Variable){
+                if(((Variable) left).pointer.isBlank()){
+                    ((Variable) left).pointer = getTempPointer(((Variable) left).name,true);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) left).pointer +", "
+                            + ((Variable) result).name);
+                }
+            }
+            if (right instanceof Variable){
+                if(((Variable) right).pointer.isBlank()){
+                    ((Variable) right).pointer = getTempPointer(((Variable) right).name,true);
+                    instructions.add("\t".repeat(tabCounter) + "lw " + ((Variable) right).pointer +", " + ((Variable) right).name);
+                }
+            }
+            left =  (left instanceof Variable? ((Variable) left).pointer :
+                    left instanceof Param ? ((Param) left).pointerRef : left );
+            right = (right instanceof Variable? ((Variable) right).pointer :
+                    right instanceof Param ? ((Param) right).pointerRef : right );
+            boolean useInmediate = false;
+            //if any is not an register, then one is an inmediate ( or both , who knows )
+            if (!String.valueOf(right).startsWith("$")){
+                useInmediate = true;
+            }
             switch (operator){
                 case ">=" -> {
-                    instructions.add("\t".repeat(tabCounter)  + "slt"  + " " + temp + " " +right + " " + left);
+                    if(useInmediate){
+                        String iTmp = newTemp(right);
+                        instructions.add("\t".repeat(tabCounter)  + "li" + " " + iTmp + " " +right);
+                        right = iTmp;
+                        releaseTemp(iTmp);
+                    }
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp + " " +right + " " + left);
                     if(!jump.isBlank()) {
                         instructions.add("\t".repeat(tabCounter) + "beq" + " " + temp + " $zero" + " " + jump);
                     }
@@ -977,20 +1091,26 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
                     }
                 }
                 case "<=" -> {
-                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp +  " " +  left + " " + right);
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + (useInmediate? "i":"") + " " + temp +  " " +  left + " " + right);
                     instructions.add("\t".repeat(tabCounter)  + "beq" + " " + temp + " $zero"  + " " + jump);
                     if (!inverseLabel.isBlank()){
                         instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + temp + " $zero" + " " + inverseLabel);
                     }
                 }
                 case "<" -> {
-                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " + left + " " + right + " ");
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + (useInmediate? "i":"") + " " + temp  + " " + left + " " + right + " ");
                     instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + temp + " $zero" + " " + jump);
                     if (!inverseLabel.isBlank()){
                         instructions.add("\t".repeat(tabCounter)  + "beq" + " " + temp + " $zero"  + " " + inverseLabel);
                     }
                 }
                 case ">" -> {
+                    if(useInmediate){
+                        String iTmp = newTemp(right);
+                        instructions.add("\t".repeat(tabCounter)  + "li" + " " + iTmp + " " +right);
+                        right = iTmp;
+                        releaseTemp(iTmp);
+                    }
                     instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " +  right + " " + left  + " ");
                     instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + temp + " $zero" + " " + jump);
                     if (!inverseLabel.isBlank()){
@@ -1004,44 +1124,61 @@ public class EnhancedIntermediateCode extends CompiScriptBaseVisitor<Object>  {
 
             result = temp;  // The result becomes the new temporary variable
         }
-        if(String.valueOf(result).startsWith("$t")) {
-            releaseTemp(String.valueOf(result));
-        }
         return result;
     }
 
     // Visit logic OR
     @Override
     public Object visitLogic_or(CompiScriptParser.Logic_orContext ctx) {
-        Object result = visit(ctx.logic_and(0));
-
-        for (int i = 1; i < ctx.getChildCount(); i += 2) {
-            Object nextComparison = visit(ctx.logic_and(i + 1));
-            String temp = newTemp(0);
-            instructions.add("\t".repeat(tabCounter) + temp + ":= " + result + " || " + nextComparison);
-            if(String.valueOf(result).startsWith("$t")) {
-                releaseTemp(String.valueOf(result));
-            }
-            result = temp;
+        if(ctx.getChildCount() == 1){
+            return visit(ctx.logic_and(0));
         }
-        return result;
+        Object r = visit(ctx.logic_and(0));
+        if(String.valueOf(r).startsWith("$t")){
+            releaseTemp(String.valueOf(r));
+        }
+        for (int i = 1; i < ctx.logic_and().size(); i += 1) {
+            Object n = visit(ctx.logic_and(i));
+            if(String.valueOf(n).startsWith("$t")){
+                releaseTemp(String.valueOf(n));
+            }
+        }
+        return null;
     }
 
     // Visit logic AND
     @Override
     public Object visitLogic_and(CompiScriptParser.Logic_andContext ctx) {
-        Object result = visit(ctx.equality(0));
-
-        for (int i = 1; i < ctx.getChildCount(); i += 2) {
-            Object nextComparison = visit(ctx.equality(i + 1));
-            String temp = newTemp(0);
-            instructions.add("\t".repeat(tabCounter) + temp + ":= " + result + " && " + nextComparison);
-            if(String.valueOf(result).startsWith("$t")) {
-                releaseTemp(String.valueOf(result));
-            }
-            result = temp;
+        if(ctx.getChildCount() == 1){
+            return visit(ctx.equality(0));
         }
-        return result;
+        String jumpIntoNext = generateLabel();
+        LabelStack.push(jumpIntoNext);
+        Object r = visit(ctx.equality(0));
+        if(String.valueOf(r).startsWith("$t")){
+            releaseTemp(String.valueOf(r));
+        }
+        LabelStack.pop();
+        instructions.add("\t".repeat(tabCounter) + jumpIntoNext + ":");
+
+        for (int i = 1; i < ctx.equality().size(); i += 1) {
+            if(i+1 <ctx.equality().size()){
+                jumpIntoNext = generateLabel();
+                instructions.add("\t".repeat(tabCounter) + jumpIntoNext + ":");
+                LabelStack.push(jumpIntoNext);
+                Object n = visit(ctx.equality(i));
+                if(String.valueOf(n).startsWith("$t")){
+                    releaseTemp(String.valueOf(n));
+                }
+                LabelStack.pop();
+            }else {
+                Object n = visit(ctx.equality(i));
+                if(String.valueOf(n).startsWith("$t")){
+                    releaseTemp(String.valueOf(n));
+                }
+            }
+        }
+        return null;
     }
 
     //IO

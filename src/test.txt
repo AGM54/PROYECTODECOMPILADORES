@@ -1,7 +1,6 @@
-fun ArgsTest(a,b,c,d,e){
-    return a + b +c +d +e;
+var x = 15;
+if ( x > 10 or x > 20 ) {
+    print "yessir";
+}else{
+    print "we are fucked"
 }
-var y = 2;
-var x = ArgsTest(1,2,3,4,y);
-print "valor de x";
-print x;
