@@ -17,7 +17,7 @@ class Function {
         return this.funName;
     }
     private CompiScriptParser.FunctionContext ctx = null;
-
+    public   List<Map<String,Map<String,Object>>> params = new ArrayList<>();
     public void setCtx(CompiScriptParser.FunctionContext ctx) {
         this.ctx = ctx;
     }
@@ -70,7 +70,7 @@ class SuperConstructor {
 }
 class Param{
     private Object typeInstnce = null;
-
+    public String pointerRef;
     public void setTypeInstnce(Object typeInstnce) {
         this.typeInstnce = typeInstnce;
     }
@@ -514,6 +514,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         new HashMap<>() {{
                             put("type", new Param());
                             put("scope", ScopesStack.peek());
+                            put("function", currCallName);
                         }});
             } else {
                 Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
@@ -563,6 +564,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+
                     // Insert into the scoped symbol table
                     value.put("scope", ScopesStack.peek());
                     scopedParametersDeclarations.get(ScopesStack.peek()).put(key, value);
@@ -707,6 +709,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                 setTypeInstnce(type);
                                             }});
                                             put("scope", ScopesStack.peek());
+                                            put("function", currCallName);
                                         }});
                             } else {
                                 Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -782,6 +785,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                             setTypeInstnce(type);
                                                         }});
                                                         put("scope", ScopesStack.peek());
+                                                        put("function", currCallName);
                                                     }});
                                         } else {
                                             Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -857,6 +861,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                                     setTypeInstnce(type);
                                                                 }});
                                                                 put("scope", ScopesStack.peek());
+                                                                put("function", currCallName);
                                                             }});
                                                 } else {
                                                     Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -1008,6 +1013,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                         setTypeInstnce(type);
                                                     }});
                                                     put("scope", ScopesStack.peek());
+                                                    put("function", currCallName);
                                                 }});
                                     } else {
                                         Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -1715,11 +1721,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     public HashMap<String,Map<String,Object>> getFusedSymbolTable(){
         HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedSymbolTable.forEach((scope,table)->{
-            table.forEach((id,data)->{
-                if(scope.equals(data.get("scope"))){
-                    fusedST.put(id,data);
-                }
-            });
+            fusedST.putAll(table);
         });
         return fusedST;
     }
@@ -1749,8 +1751,25 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedParametersDeclarations.forEach((scope,table)->{
             table.forEach((id,data)->{
-                if(scope.equals(data.get("scope"))) {
+                if(!fusedST.containsKey(id)){
                     fusedST.put(id,data);
+                } else if (
+                        ((Param) fusedST.get(id).get("type")).getTypeInstnce() == null &&
+                        ((Param) data.get("type")).getTypeInstnce() != null
+                ) {
+                    if (!fusedST.get(id).get("function").equals(data.get("function"))){
+                        if(fusedST.get(id).containsKey("functionMapping")){
+                            ((HashMap<String,Param>) fusedST.get(id).get("functionMapping")).put((String) data.get("function"),
+                                    ((Param) data.get("type")));
+                        }else{
+                            HashMap<String,Param> parMapping = new HashMap<>();
+                            parMapping.put((String) fusedST.get(id).get("function"),((Param) fusedST.get(id).get("type")));
+                            parMapping.put((String) data.get("function"),((Param) data.get("type")));
+                            fusedST.get(id).put("functionMapping",parMapping);
+                        }
+                    }else{
+                        fusedST.put(id,data);
+                    }
                 }
             });
         });

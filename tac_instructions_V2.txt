@@ -1,105 +1,31 @@
 .data
-objetivo: .word 7
-buscador.a: .asciiz "a"
-indice: .word -1
+i: .word 2
 .text
 .globl main
 main:
-ALLOC buscador
-PUSH buscador
-jal Busqueda::init
-POP buscador
-li objetivo 7
-li indice 
-concat $t0, "El elemento ", objetivo
-concat $t0, $t0, " está en el índice: "
-concat $t0, $t0, indice
-OUT $t0
-busqueda_init:
-	PARAM SELF
-	LOAD P_0 SELF a
-	li P_0 "a"
-	jr $ra
-busqueda_obtenervalorenindice:
-	PARAM SELF
-	PARAM indice
-	beq indice 0 L_0
-	bne indice 0 L_1
-	L_0:
-		li $v0 1
-		j L_1
+la $s1, i
+li $t0, 1
+sw $t0, $s1
+L_0:
+slt $t0 i 5
+beq $t0 $zero L_1
+bne $t0 $zero L_2
 	L_1:
-	beq indice 1 L_2
-	bne indice 1 L_3
-	L_2:
-		li $v0 3
-		j L_3
+	div i, 2
+	mfhi $t0
+	beq $t0 0 L_3
+	bne $t0 0 L_5
 	L_3:
-	beq indice 2 L_4
-	bne indice 2 L_5
-	L_4:
-		li $v0 5
-		j L_5
+		concat $t0, i, " es par"
+		OUT $t0
+		j L_4
 	L_5:
-	beq indice 3 L_6
-	bne indice 3 L_7
-	L_6:
-		li $v0 7
-		j L_7
-	L_7:
-	beq indice 4 L_8
-	bne indice 4 L_9
-	L_8:
-		li $v0 9
-		j L_9
-	L_9:
-	beq indice 5 L_10
-	bne indice 5 L_11
-	L_10:
-		li $v0 11
-		j L_11
-	L_11:
-	beq indice 6 L_12
-	bne indice 6 L_13
-	L_12:
-		li $v0 13
-		j L_13
-	L_13:
-	li$t0 -1
-	li $v0 $t0
-	jr $ra
-busqueda_busquedabinaria:
-	PARAM SELF
-	PARAM izquierda
-	PARAM derecha
-	PARAM objetivo
-	slt $t0 izquierda derecha
-	beq $t0 $zero L_14
-	slt $t0 derecha izquierda L_15
-	L_14:
-		add $t0, izquierda, derecha
-		div $t0, 2
-		mflo $t0
-		li medio $t0
-		LOAD P_1 SELF obtenerValorEnIndice
-		li valorMedio P_1
-		beq valorMedio objetivo L_16
-		bne valorMedio objetivo L_17
-		L_16:
-			li $v0 medio
-			j L_17
-		L_17:
-		slt $t0 objetivo valorMedio L_18
-		slt $t0 valorMedio objetivo L_19
-		L_18:
-			LOAD P_2 SELF busquedaBinaria
-			li $v0 P_2
-			j L_19
-		L_19:
-		LOAD P_3 SELF busquedaBinaria
-		li $v0 P_3
-		j L_15
-	L_15:
-	li$t0 -1
-	li $v0 $t0
-	jr $ra
+		concat $t0, i, " es impar"
+		OUT $t0
+	L_4:
+	add $t0, i, 1
+	la $s1, i
+	li $t0, $t0
+	sw $t0, $s1
+j L_0
+L_2:
