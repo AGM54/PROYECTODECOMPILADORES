@@ -1,34 +1,23 @@
 .data
-x: .word 15
-_S_0: .asciiz "yessir"
-_S_1: .asciiz "we are fucked"
+x: .word 0
 #-----MAIN LOOP -----
 .text
 .globl main
 main:
-la $s1, x
-li $t0, 15
-sw $t0, 0($s1)
-lw $t1, x
-li $t2 10
-slt $t0 $t2 $t1 
-bne $t0 $zero L_0
-beq $t0 $zero L_2
-li $t2 20
-slt $t0 $t2 $t1 
-bne $t0 $zero L_0
-beq $t0 $zero L_2
-L_0:
-	la $a0 , _S_0
-	li $v0 , 4
-	syscall
-	j L_1
-L_2:
-	la $a0 , _S_1
-	li $v0 , 4
-	syscall
-L_1:
 li $v0, 10
 syscall
 #-----MAIN TERMINATION-----
 #-----FUNCTIONS-----
+fibonacci:
+	li $t0 , 1
+	slt $t1 , $a0 , $t0
+	beq $t1 , $zero , L_0
+	L_0:
+		move $v0 , $a0
+		jr $ra
+	L_1:
+	addi $t1 , $a0 , -1
+	addi $t0 , $a0 , -2
+	addi $t2 , $a0 , -3
+	li $v0 , null
+	jr $ra

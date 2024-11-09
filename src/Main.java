@@ -2,8 +2,6 @@ import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 public class Main {
     public static void main(String[] args) {
@@ -33,7 +31,7 @@ public class Main {
             CompiScriptCustomVisitor visitor = new CompiScriptCustomVisitor();
             visitor.visit(tree);
             visitor.printSymbols();
-            EnhancedIntermediateCode icVisitor = new EnhancedIntermediateCode(
+            MippsTreeVisitor icVisitor = new MippsTreeVisitor(
                     visitor.getFusedSymbolTable(),
                     visitor.getFusedFunctionsTable(),
                     visitor.getFusedClassTable(),
