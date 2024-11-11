@@ -20,7 +20,8 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
     private String CurrClasName = "";
     private Boolean hasReturnSmt = false;
     private String CurrentFunction = "";
-
+    private int StackSpaceForFunction = 0;
+    private int RecursiveCalls = 0;
     //the _B_ value on .data, which is going to be a buffer to temp store strings
     private Boolean hasStringBuffer = false;
 
@@ -31,7 +32,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
     private HashMap<String, Map<String, Object>> FT; //functions
     private HashMap<String, Map<String, Object>> CT; //classes
     private HashMap<String, Map<String, Object>> PT; //parameters
-    private HashMap<String, String> StringConstants = new HashMap<>(); //string constants
+    private HashMap<String, String> RecoverAddress = new HashMap<>(); //hashmap to recover the adresses on recursive functions
 
     // Method to write TAC instructions to a file
     public void writeToFile(String filePath) {
@@ -118,6 +119,11 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
+        for (Map.Entry<String, Map<String, Object>> entry : FT.entrySet()) {
+            String key = entry.getKey();
+            Map<String, Object> value = entry.getValue();
+            ((Function) value.get("type")).recursiveInstances /= 2 ;
+        }
     }
     @Override
     public Object visitPrintStmt(CompiScriptParser.PrintStmtContext ctx) {
@@ -138,7 +144,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         } else if (ctx.IDENTIFIER() != null) {
             String name = ctx.IDENTIFIER().getText();
             if (ST.containsKey(name)) {
-                ST.get(name).get("type");
+                return ST.get(name).get("type");
             } else if (FT.containsKey(name)) {
                 return FT.get(name).get("type");
             } else if (PT.containsKey(name)) {
@@ -367,6 +373,40 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             // Generate TAC for the unary operation
         }
         return visit(ctx.call());
+    }
+
+    @Override
+    public Object visitVarDecl(CompiScriptParser.VarDeclContext ctx){
+        // Capturamos el nombre de la variable que se está declarando
+        String varName = ctx.IDENTIFIER().getText();
+        currentInstanceName = varName;
+        Object val = visit(ctx.expression());
+        // Si es una instanciación, visitamos la expresión para capturar la instancia
+        if(!(val instanceof Instance)) {
+            if (ctx.expression() != null) {
+                String name = ctx.IDENTIFIER().getText();
+                Register save = mips.createSave(new Variable(name,val));
+                mips.loadAddres(save.pointer, name);
+                if (val instanceof Register) {
+                    mips.saveWordInto("0(" + save.pointer + ")",((Register) val).pointer);
+                } else if (val instanceof Variable) {
+                    Register valPointer = mips.getRegister(val);
+                    if (valPointer == null){
+                        valPointer = mips.createTemporal(val);
+                        mips.loadWord(valPointer.pointer,name);
+                        mips.releaseRegister(valPointer.pointer);
+                    }
+                    mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
+                }else{
+                    Register valPointer = mips.createTemporal(val);
+                    mips.loadInmediate(valPointer.pointer,name);
+                    mips.releaseRegister(valPointer.pointer);
+                    mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
+                }
+            }
+        }
+        currentInstanceName = "";
+        return null;
     }
 
     @Override
@@ -659,13 +699,14 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
 
         if (ctx.statement(1) != null) {
             labelElse = mips.generateLabel();
-            inverseLabel = labelElse;
+            mips.addInverse(inverseLabel);
         }else{
             inverseLabel = labelEnd;
+            mips.addInverse(inverseLabel);
         }
 
         visit(ctx.expression());
-        inverseLabel="";
+        mips.quitInverse();
         mips.quitJump();
 
         // Generate TAC for the condition
@@ -711,6 +752,56 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         return null;
     }
 
+    @Override
+    public Object visitInstantiation(CompiScriptParser.InstantiationContext ctx) {
+        // Obtenemos el nombre de la clase que estamos instanciando
+        String className = ctx.IDENTIFIER().getText();
+        int argsCounter = 0;
+        int stackReserve = 0;
+        // Usamos el nombre de la instancia almacenado en currentInstanceName
+        // Generamos la instrucción de ALLOCATE para reservar memoria para el objeto
+        Register instanceHolder = mips.createArgument(ST.get(currentInstanceName).get("type"));
+        mips.loadAddres(instanceHolder.pointer, currentInstanceName);
+        argsCounter++;
+        // Manejamos los argumentos (parámetros pasados al constructor)
+
+        if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+            CompiScriptParser.ArgumentsContext arguments = ctx.arguments();  // Primer set de argumentos
+            for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
+                Object arg = visit(arguments.getChild(i));
+                Register argRegister = mips.createArgument(arg);
+                if (arg instanceof Variable) {
+                    Register pointerVar = mips.getRegister(arg);
+                    if(pointerVar == null){
+                        mips.loadWord(argRegister.pointer,((Variable) arg).name);
+                    }else{
+                        mips.moveInto(argRegister.pointer,pointerVar.pointer);
+                        mips.releaseRegister(pointerVar.pointer);
+                    }
+                    mips.releaseRegister(pointerVar.pointer);
+                } else if(arg instanceof Register r){
+                    mips.moveInto(argRegister.pointer,r.pointer);
+                    mips.releaseRegister(r.pointer);
+                }else{
+                    mips.loadInmediate(argRegister.pointer,arg);
+                }
+                if (argsCounter > 3) {
+                    if (arg instanceof Variable) {
+                        stackReserve += mips.calculateSize(((Variable) arg).value);
+                    }else if(arg instanceof Register) {
+                        stackReserve += mips.calculateSize(((Register) arg).value);
+                    }else{
+                        stackReserve += mips.calculateSize(arg);
+                    }
+                }
+                    argsCounter ++;
+            }
+        }
+        mips.jumpAndLink(className.toLowerCase() + "_init");
+        // Llamada al constructor con la clase especificada
+        return ST.get(currentInstanceName).get("type");
+    }
+
     // Visit function declaration
     @Override
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
@@ -719,6 +810,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         if(ctx.block().declaration().isEmpty()){
             return null;
         }
+
         mips.SwitchToLocal();
         if(!CurrClasName.isEmpty()){
             CurrentFunction = CurrClasName + "." + functionName;
@@ -730,52 +822,96 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
 
         //add the parameters
         mips.tabsIncrease();
-        int argsCounter = 0;
         if(!CurrClasName.isBlank()){
-            argsCounter ++;
+           mips.createArgument(ST.get(CurrClasName).get("type"));
         }
-
-        int stackReserve = 0;
-        ArrayList<String> extraParams = new ArrayList<>();
-
-        if (ctx.parameters() != null){
-            for (int i = 0; i < ctx.parameters().getChildCount(); i+=2){
+        int StackReserve = 0;
+        if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
+            mips.SwitchToTemporalInstructionsSet();
+        }
+        if (ctx.parameters() != null) {
+            for (int i = 0; i < ctx.parameters().getChildCount(); i += 2) {
                 String param = String.valueOf(ctx.parameters().getChild(i).getText());
-                if(PT.get(param).containsKey("functionMapping")){
-                    ((Param) ((HashMap<String,Param>) PT.get(param).get("functionMapping")).get(CurrentFunction) ).pointerRef
-                            = mips.createArgument(((Param) ((HashMap<String,Param>) PT.get(param).get("functionMapping"))
-                            .get(CurrentFunction)).getTypeInstnce()).pointer;
-                    if (argsCounter > 3){
-                        stackReserve += mips.calculateSize(
-                                ((Param) ((HashMap<String,Param>) PT.get(param).get("functionMapping")).get(CurrentFunction)).getTypeInstnce()
-                        );
-                    }
-                    argsCounter ++;
-                }else{
-                        ((Param)PT.get(param).get("type")).pointerRef
-                                = mips.createArgument(((Param)PT.get(param).get("type")).getTypeInstnce()).pointer;
-                        if (argsCounter > 3) {
-                            stackReserve += mips.calculateSize( ((Param)PT.get(param).get("type")).getTypeInstnce());
+                if (PT.get(param).containsKey("functionMapping")) {
+                    ((Param) ((HashMap<String, Param>) PT.get(param).get("functionMapping")).get(CurrentFunction))
+                            .pointerRef = mips.createArgument(
+                            ((Param) ((HashMap<String, Param>) PT.get(param).get("functionMapping"))
+                                    .get(CurrentFunction)).getTypeInstnce()).pointer;
+                    if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()){
+                        Param p = ((Param) ((HashMap<String, Param>) PT.get(param).get("functionMapping"))
+                                .get(CurrentFunction));
+                        if (p.pointerRef.endsWith("($sp)")){
+                            mips.SwitchToLocal();
+                            String tmp = mips.createTemporal(p.getTypeInstnce()).pointer;
+                            mips.loadWord(tmp,p.pointerRef);
+                            mips.SwitchToTemporalInstructionsSet();
+                            mips.saveWordInto( StackReserve + "($sp)"
+                                    ,tmp);
+                            mips.releaseRegister(tmp);
+                        }else {
+                            mips.saveWordInto( StackReserve + "($sp)"
+                                    ,p.pointerRef);
                         }
-                        argsCounter ++;
+                        RecoverAddress.put(
+                                p.pointerRef,
+                                StackReserve + "($sp)"
+                        );
+
+                        StackReserve += mips.calculateSize(p.getTypeInstnce());
+                    }
+                } else {
+                    ((Param) PT.get(param).get("type")).pointerRef = mips.createArgument(
+                            ((Param) PT.get(param).get("type")).getTypeInstnce()).pointer;
+                    if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()){
+                        Param p = ((Param) PT.get(param).get("type"));
+                        if (p.pointerRef.endsWith("($sp)")){
+                            mips.SwitchToLocal();
+                            String tmp = mips.createTemporal(p.getTypeInstnce()).pointer;
+                            mips.loadWord(tmp,p.pointerRef);
+                            mips.SwitchToTemporalInstructionsSet();
+                            mips.saveWordInto( StackReserve + "($sp)"
+                                    ,tmp);
+                            mips.releaseRegister(tmp);
+                        }else {
+                            mips.saveWordInto( StackReserve + "($sp)"
+                                    ,p.pointerRef);
+                        }
+                        RecoverAddress.put(
+                                p.pointerRef,
+                                StackReserve + "($sp)"
+                        );
+                        StackReserve += mips.calculateSize(p.getTypeInstnce());
+                    }
                 }
             }
         }
 
         // Visit the function body (block)
+        mips.resetArguments();
         inFunction = true;
         hasReturnSmt = false;
+        if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
+            mips.SwitchToLocal();
+            StackSpaceForFunction = StackReserve + 4;
+            mips.reserveOnStack(StackReserve + 4);
+            mips.PushTemporalInstructions();
+            mips.saveWordInto(StackReserve+ "($sp)","$ra");
+        }
         visit(ctx.block());
-        mips.resetArguments();
+
+        StackSpaceForFunction = 0;
+        RecoverAddress.clear();
         inFunction = false;
         if (!hasReturnSmt) {
             mips.jumpReturn();
         }
         hasReturnSmt = false;
+
         mips.tabsDecrease();
         mips.SwitchToMain();
-
         CurrentFunction = "";
+        RecursiveCalls = 0;
+
         return null;
     }
 
@@ -808,10 +944,215 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
+        if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
+            mips.releaseOnStack(StackSpaceForFunction);
+        }
         mips.jumpReturn();
         hasReturnSmt = true;
         return returnPointer;
     }
 
+    @Override
+    public Object visitCall(CompiScriptParser.CallContext ctx) {
+        // Verificamos si estamos trabajando con una instancia de "new"
+        if (ctx.getChildCount() == 1) { //primary call
+            if (ctx.primary() != null) {
+                if (ctx.primary().array() != null) { // is an array (somehow)
+                    return visit(ctx.primary().array());
+                } else { //just a primary
+                    return visit(ctx.primary());
+                }
+            }
+        }
 
+        // Si no es una instancia de "new", manejamos una llamada regular
+        Object primary = (visit(ctx.primary()));
+        if(primary instanceof Function fun){
+            // Si hay argumentos en la llamada
+            int argsCounter = 0;
+            int stackReserve = 0;
+
+            if(ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                for (int i = 0; i < arguments.getChildCount(); i += 2) {
+                    Object arg = visit(arguments.getChild(i));
+                    Register argRegister = mips.createArgument(arg);
+                    if (argsCounter < 4){
+                        if (arg instanceof Variable var) {
+                            Register pointerVar = mips.getRegister(arg);
+                            stackReserve += mips.calculateSize(var);
+                            if(pointerVar == null){
+                                mips.loadWord(argRegister.pointer,((Variable) arg).name);
+                            }else{
+                                mips.moveInto(argRegister.pointer,pointerVar.pointer);
+                                mips.releaseRegister(pointerVar.pointer);
+                            }
+                            mips.releaseRegister(pointerVar.pointer);
+                        } else if(arg instanceof Register r){
+                            mips.moveInto(argRegister.pointer,r.pointer);
+                            mips.releaseRegister(r.pointer);
+                        }else{
+                            mips.loadInmediate(argRegister.pointer,arg);
+                        }
+                        argsCounter ++;
+                    }else{
+                        mips.SwitchToTemporalInstructionsSet();
+                        if (arg instanceof Variable) {
+                            Register pointerVar = mips.getRegister(arg);
+                            if(pointerVar == null){
+                                mips.loadWord(argRegister.pointer,((Variable) arg).name);
+                            }else{
+                                mips.saveWordInto(argRegister.pointer,pointerVar.pointer);
+                                mips.releaseRegister(pointerVar.pointer);
+                            }
+                            mips.releaseRegister(pointerVar.pointer);
+                        } else if(arg instanceof Register r){
+                            mips.saveWordInto(argRegister.pointer,r.pointer);
+                            mips.releaseRegister(r.pointer);
+                        }else{
+                            mips.loadInmediate(argRegister.pointer,arg);
+                        }
+                    }
+                }
+            }
+            if(argsCounter> 3){
+                mips.reserveOnStack(stackReserve);
+                mips.SwitchToLocal();
+                mips.PushTemporalInstructions();
+            }
+            mips.jumpAndLink(((Function) primary).getFunName().toLowerCase());
+            if(argsCounter> 3){
+                mips.releaseOnStack(stackReserve);
+            }
+            mips.resetArguments();
+            if(CurrentFunction.equals(fun.getFunName())){
+                if(RecursiveCalls < fun.recursiveInstances - 1){
+                    //time to recover the parameters since there is another recursive call after it or for any operation
+                    for(String key : RecoverAddress.keySet()){
+                        if(key.endsWith("($sp)")){
+                            //TODO
+                            //needs to be loaded into a temporal before the stack gets moved
+                        }else{
+                            mips.loadWord(key,RecoverAddress.get(key));
+                        }
+                    }
+
+                }
+                RecursiveCalls ++;
+            }
+            return mips.setReturnRegister(fun.getReturnsType());
+        }
+        else if (primary instanceof ThisDirective){
+            String name =CurrClasName + "." + ctx.IDENTIFIER().getFirst().getText();
+            if(ST.containsKey(name)){
+                return ST.get(name).get("offset") +"($a0)";
+            }else{
+                //is a method call
+            }
+        } else if (primary instanceof Instance ins){
+            Object lastDeclaration = ins; //contiene info del nombre de la variable que es la instancia;
+            Register lastPointer  = null;
+            int i = 1;
+            while (i < ctx.getChildCount()) {
+                if (ctx.getChild(i).getText().equals(".") ||
+                        ctx.getChild(i).getText().equals(")") ||
+                        ctx.getChild(i).getText().equals("[") ||
+                        ctx.getChild(i).getText().equals("(") ||
+                        ctx.getChild(i).getText().equals("]")
+                ) {//the Identifier is the next one so continue
+                    i++;
+                    continue;
+                }
+                if (lastDeclaration instanceof Instance ims) {
+                    //get the next Identifier
+                    String attr = ((Instance) lastDeclaration).getLookUpName() +
+                            "." + ctx.getChild(i).getText();
+                    String method = ((Instance) lastDeclaration).getClasName() +
+                            "." + ctx.getChild(i).getText();
+
+                    if (ST.containsKey(attr)) { // is an attribute
+                        lastDeclaration = ST.get(attr).get("type");
+                        //load it into a pointer
+                        lastPointer = mips.getRegister(primary);
+                        if(lastPointer == null)
+                        {
+                            lastPointer = mips.createSave(primary);
+                            mips.loadAddres(lastPointer.pointer,((Instance) primary).getLookUpName());
+                        }
+                        lastPointer = new Register(
+                        ST.get(attr.replace(ims.getLookUpName(), ims.getClasName())).get("offset") + "("
+                                + lastPointer + ")",
+                                lastDeclaration
+                                );
+                        mips.setRegister(lastPointer.pointer,lastDeclaration);
+                    }
+                    else if (ST.containsKey(method)) {//is a method
+                        //load it into a pointer
+                        lastPointer = mips.setReturnRegister(
+                                ((Function) ST.get(method).get("type")).getReturnsType()
+                        );
+                        int argsCounter = 0;
+                        int stackReserve = 0;
+                        i+=2;
+                        while(!ctx.getChild(i).getText().equals(")")){
+                            i++;
+                        }
+
+
+                        if(ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                            CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                            for (int j = 0; j< arguments.getChildCount(); j += 2) {
+                                Object arg = visit(arguments.getChild(j));
+                                Register argRegister = mips.createArgument(arg);
+                                if (argsCounter < 4){
+                                    mips.SwitchToTemporalInstructionsSet();
+                                    if (arg instanceof Variable var) {
+                                        Register pointerVar = mips.getRegister(arg);
+                                        stackReserve += mips.calculateSize(var);
+                                        if(pointerVar == null){
+                                            mips.loadWord(argRegister.pointer,((Variable) arg).name);
+                                        }else{
+                                            mips.moveInto(argRegister.pointer,pointerVar.pointer);
+                                            mips.releaseRegister(pointerVar.pointer);
+                                        }
+                                        mips.releaseRegister(pointerVar.pointer);
+                                    } else if(arg instanceof Register r){
+                                        mips.moveInto(argRegister.pointer,r.pointer);
+                                        mips.releaseRegister(r.pointer);
+                                    }else{
+                                        mips.loadInmediate(argRegister.pointer,arg);
+                                    }
+                                    argsCounter ++;
+                                }else{
+                                    if (arg instanceof Variable) {
+                                        Register pointerVar = mips.getRegister(arg);
+                                        if(pointerVar == null){
+                                            mips.loadWord(argRegister.pointer,((Variable) arg).name);
+                                        }else{
+                                            mips.saveWordInto(argRegister.pointer,pointerVar.pointer);
+                                            mips.releaseRegister(pointerVar.pointer);
+                                        }
+                                        mips.releaseRegister(pointerVar.pointer);
+                                    } else if(arg instanceof Register r){
+                                        mips.saveWordInto(argRegister.pointer,r.pointer);
+                                        mips.releaseRegister(r.pointer);
+                                    }else{
+                                        mips.loadInmediate(argRegister.pointer,arg);
+                                    }
+                                }
+                            }
+                        }
+                        if(argsCounter > 3){
+                            mips.reserveOnStack(stackReserve);
+                            mips.SwitchToLocal();
+                            mips.PushTemporalInstructions();
+                        }
+                    }
+                }
+                i++;
+            }
+            return lastPointer;
+        }
+        return null;
+    }
 }

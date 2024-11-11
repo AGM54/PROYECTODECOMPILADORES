@@ -11,6 +11,7 @@ public class MipsInstructionsGenerator {
     private HashMap<String,String> StringConstants = new HashMap();
     //Stacks
     private List<String> jumpCalls = new ArrayList<>();  //functions/methods to be called
+    private List<String> temporalCalls = new ArrayList<>();  //functions/methods to be called
     private List<String> mainCalls = new ArrayList<>(){{add(".text");
         add(".globl main");
         add("main:");}};  //the main flow of instructions
@@ -155,7 +156,14 @@ public class MipsInstructionsGenerator {
     public void SwitchToLocal(){
         this.instructions = this.jumpCalls;
     }
-
+    public void SwitchToTemporalInstructionsSet(){
+        this.instructions = this.temporalCalls;
+    }
+    public void PushTemporalInstructions()
+    {
+        this.instructions.addAll(this.temporalCalls);
+        this.temporalCalls.clear();
+    }
     public void addStringConstant(String string){
         if(!StringConstants.containsKey(string)){
             dataHeader.add("_S"+ + constantCounter + "_ : .asciiz " + string);
@@ -386,15 +394,15 @@ public class MipsInstructionsGenerator {
     }
 
     public void equals(String left, String right){
-        instructions.add("\t".repeat(tabCounter)  + "beq" +left + " , " + right + " , " + jumpLabels.peek());
+        instructions.add("\t".repeat(tabCounter)  + "beq " +left + " , " + right + " , " + jumpLabels.peek());
         if(!jumpInverseLabels.isEmpty()){
-            instructions.add("\t".repeat(tabCounter)  + "bne" +left + " , " + right + " , " + jumpInverseLabels.peek());
+            instructions.add("\t".repeat(tabCounter)  + "bne " +left + " , " + right + " , " + jumpInverseLabels.peek());
         }
     }
     public void notEquals(String left, String right){
-        instructions.add("\t".repeat(tabCounter)  + "bne" +left + " , " + right + " , " + jumpLabels.peek());
+        instructions.add("\t".repeat(tabCounter)  + "bne " +left + " , " + right + " , " + jumpLabels.peek());
         if(!jumpInverseLabels.isEmpty()){
-            instructions.add("\t".repeat(tabCounter)  + "beq" +left + " , " + right + " , " + jumpInverseLabels.peek());
+            instructions.add("\t".repeat(tabCounter)  + "beq " +left + " , " + right + " , " + jumpInverseLabels.peek());
         }
     }
 
@@ -431,6 +439,7 @@ public class MipsInstructionsGenerator {
             Register ref = getRegister(tmp);
             if(ref == null){
                 ref = createTemporal(tmp);
+                loadWord(ref.pointer,tmp.name);
             }
             PrintValue(tmp.value, ref.pointer);
         }
