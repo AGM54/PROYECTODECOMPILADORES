@@ -442,9 +442,11 @@ public class MipsInstructionsGenerator {
                 loadWord(ref.pointer,tmp.name);
             }
             PrintValue(tmp.value, ref.pointer);
+            return;
         }
         if (val instanceof Register reg){
             PrintValue(reg.value,reg.pointer);
+            return;
         }
         int mode = -1;
         if (val instanceof Integer){

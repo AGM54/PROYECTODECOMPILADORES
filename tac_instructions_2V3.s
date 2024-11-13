@@ -40,9 +40,9 @@ fibonacci:
 	addi $t0 , $a0 , -2
 	move $a0 , $t0
 	jal fibonacci
-	move $t2 , $v0
-	add $t3, $t1, $t2
-	move $v0 , $t3
+	move $t0 , $v0
+	add $t0, $t1, $t0
+	move $v0 , $t0
 	lw $ra , 4($sp)
 	add $sp, $sp, 8
 	jr $ra

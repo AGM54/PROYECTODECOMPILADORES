@@ -6,7 +6,7 @@ import java.io.IOException;
 public class Main {
     public static void main(String[] args) {
         // Ruta del archivo fuente de CompiScript que deseas analizar
-        String inputFile = "src/test.txt";
+        String inputFile = "src/test2.txt";
 
         try {
             // Leer el archivo fuente
@@ -38,7 +38,7 @@ public class Main {
                     visitor.getFusedParametersTable());
             icVisitor.visit(tree);
 
-            icVisitor.writeToFile("tac_instructions_V3.s");
+            icVisitor.writeToFile("tac_instructions_2V3.s");
         } catch (IOException e) {
             e.printStackTrace();
         }

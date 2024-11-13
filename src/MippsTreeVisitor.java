@@ -607,11 +607,14 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             switch (operator){
                 case ">=" -> {
                     mips.lessThan(tmp.pointer,((Register) right).pointer,((Register) left).pointer);
-                    mips.equals(tmp.pointer,mips.zero.pointer);
+                    mips.notEquals(tmp.pointer,mips.zero.pointer);
                 }
                 case "<=" -> {
+                    String inverse = mips.quitInverse();
+                    mips.equals(((Register) left).pointer ,((Register) right).pointer);
+                    mips.addInverse(inverse);
                     mips.lessThan(tmp.pointer,((Register) left).pointer ,((Register) right).pointer);
-                    mips.equals(tmp.pointer,mips.zero.pointer);
+                    mips.notEquals(tmp.pointer,mips.zero.pointer);
                 }
                 case "<" -> {
                     mips.lessThan(tmp.pointer,((Register) left).pointer ,((Register) right).pointer);
@@ -823,7 +826,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         //add the parameters
         mips.tabsIncrease();
         if(!CurrClasName.isBlank()){
-           mips.createArgument(ST.get(CurrClasName).get("type"));
+           mips.createArgument(CT.get(CurrClasName).get("type"));
         }
         int StackReserve = 0;
         if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
@@ -896,6 +899,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             mips.reserveOnStack(StackReserve + 4);
             mips.PushTemporalInstructions();
             mips.saveWordInto(StackReserve+ "($sp)","$ra");
+            RecoverAddress.put("$ra",StackReserve+ "($sp)");
         }
         visit(ctx.block());
 
@@ -945,6 +949,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             }
         }
         if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
+            mips.loadWord("$ra",RecoverAddress.get("$ra"));
             mips.releaseOnStack(StackSpaceForFunction);
         }
         mips.jumpReturn();
