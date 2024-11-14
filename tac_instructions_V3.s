@@ -26,7 +26,7 @@ fibonacci:
 	bne $t1 , $zero , L_0
 	beq $t1 , $zero , L_1
 	L_0:
-		move $v0 , $a0
+		li $v0 , 1
 		lw $ra , 4($sp)
 		add $sp, $sp, 8
 		jr $ra
@@ -40,9 +40,11 @@ fibonacci:
 	addi $t0 , $a0 , -2
 	move $a0 , $t0
 	jal fibonacci
-	move $t2 , $v0
-	add $t3, $t1, $t2
-	move $v0 , $t3
+	lw $a0 , 0($sp)
+	lw $ra , 4($sp)
+	move $t0 , $v0
+	add $t0, $t1, $t0
+	move $v0 , $t0
 	lw $ra , 4($sp)
 	add $sp, $sp, 8
 	jr $ra

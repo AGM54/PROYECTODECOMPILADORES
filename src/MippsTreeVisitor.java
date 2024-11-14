@@ -1031,7 +1031,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             }
             mips.resetArguments();
             if(CurrentFunction.equals(fun.getFunName())){
-                if(RecursiveCalls < fun.recursiveInstances - 1){
                     //time to recover the parameters since there is another recursive call after it or for any operation
                     for(String key : RecoverAddress.keySet()){
                         if(key.endsWith("($sp)")){
@@ -1041,8 +1040,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                             mips.loadWord(key,RecoverAddress.get(key));
                         }
                     }
-
-                }
                 RecursiveCalls ++;
             }
             return mips.setReturnRegister(fun.getReturnsType());

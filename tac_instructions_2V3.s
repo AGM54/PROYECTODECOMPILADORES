@@ -1,5 +1,6 @@
 .data
 x: .word 0
+perrito: .asciiz "carlos"
 #-----MAIN LOOP -----
 .text
 .globl main
