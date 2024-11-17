@@ -1,7 +1,15 @@
-for (var i = 1; i <= 5; i = i + 1) {
-  if (i % 2 == 0) {
-    print i + " es par";
-  } else {
-    print i + " es impar";
+fun ackermann(m, n) {
+  if (m == 0) {
+    return n + 1;
+  } else if (m > 0 and n == 0) {
+    return ackermann(m - 1, 1);
+  } else if (m > 0 and n > 0) {
+    return ackermann(m - 1, ackermann(m, n - 1));
   }
 }
+
+// Testing the Ackermann function
+var m = 2;
+var n = 3;
+var result = ackermann(m, n);
+print result;

@@ -454,7 +454,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     String ref = mips.getConstantLabel(s);
                 } else if(val instanceof Param param){
                     if (val instanceof String s) {
-
                     }else{
                         mips.saveWordInto(self.pointer, param.pointerRef);
                     }

@@ -457,13 +457,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
         }
         Object returner = visitChildren(ctx);
-        if (returner!=null) {
+        if(returner != null) {
             if (CurrClasName.isEmpty()) {
                 ((Function) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
             } else {
                 ((Method) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
             }
         }
+
         CurrFuncName = "";
         // Pop the Scope after processing
         String lastScope = ScopesStack.pop();
@@ -576,8 +577,15 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //the return statement
     @Override
     public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx) {
+
         if (ctx.expression()!= null) {
-            return visit(ctx.expression());
+            Object express = visit(ctx.expression());
+            if (express != null){
+                for(String stack : scopedDeclaredFunctions.keySet()){
+                    ( ( Function)scopedDeclaredFunctions.get(stack).get(CurrFuncName).get("type") ).setReturnsType(express);
+                }
+            }
+            return express;
         }
         // a simple return , return a null
         return null;
@@ -659,7 +667,13 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         ( ( Function)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
                         ( ( Function)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).recursiveInstances += 1;
                     }
+                    if( ((Function) primary).getReturnsType() != null ) {
+                        return ((Function) primary).getReturnsType();
+                    }
                     return new Param();
+                }
+                if( ((Function) primary).getReturnsType() != null ) {
+                    return ((Function) primary).getReturnsType();
                 }
             }
             if (primary instanceof  ThisDirective) {

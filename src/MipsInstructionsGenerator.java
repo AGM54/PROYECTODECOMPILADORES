@@ -180,6 +180,24 @@ finalize_int:
     jr $ra                  # Return to caller
 """;
 
+    private String bufferCleaning = """
+clear_buffer:
+    # $a0 contains the buffer address (_B_)
+    # $a1 contains the size of the buffer
+    move $t0, $a0          # $t0 points to the start of the buffer
+    move $t1, $a1          # $t1 is the size of the buffer (number of bytes to clear)
+
+clear_loop:
+    beqz $t1, clear_done   # If size is 0, we are done
+    sb $zero, 0($t0)       # Set the current byte to 0
+    addi $t0, $t0, 1       # Move to the next byte in the buffer
+    addi $t1, $t1, -1      # Decrement the size counter
+    j clear_loop           # Repeat the loop
+
+clear_done:
+    jr $ra                 # Return to the caller
+
+            """;
 
 
     //set up a register
@@ -226,6 +244,7 @@ finalize_int:
             if(addConcats){
                 writer.write(concatString);
                 writer.write(concatInteger);
+                writer.write(bufferCleaning);
             }
             System.out.println("TAC instructions have been written to " + filePath);
         } catch (IOException e) {
