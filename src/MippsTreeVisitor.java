@@ -241,6 +241,24 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         }
                         mips.sum(temp, result, nextFactor);
                     } else { //string concatenations
+                        if(rType instanceof String rr){
+                            mips.concatString(rr);
+                        } else if (rType instanceof Number number) {
+                            if (result instanceof Register rr){
+                                mips.concatInteger(rr);
+                            }else{
+                                mips.concatInteger(rType);
+                            }
+                        }
+                        if(nType instanceof String rr){
+                            mips.concatString(rr);
+                        } else if (nType instanceof Number number) {
+                            if (nextFactor instanceof Register rr){
+                                mips.concatInteger(rr);
+                            }else{
+                                mips.concatInteger(nType);
+                            }
+                        }
                         temp = mips.createTemporal(String.valueOf(rType) + String.valueOf(nType));
                     }
                     break;

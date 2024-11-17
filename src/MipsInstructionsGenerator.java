@@ -107,76 +107,80 @@ public class MipsInstructionsGenerator {
         registerDescription.put(register,null);
     }
 
-    private String concatString = """
-concat_string:
-    # Find the end of the current buffer
-    move $t0, $a1         # $t0 points to the buffer
-find_end:
-    lb $t1, 0($t0)        # Load byte from buffer
-    beqz $t1, start_copy  # Break if null terminator is found
-    addi $t0, $t0, 1      # Move to the next byte
-    j find_end
+    private Boolean addConcats = false;
 
-start_copy:
+    private String concatString = """
+concat_string_str:
+    # Find the end of the current buffer
+    la $t0, _B_         # $t0 points to the buffer
+find_end_str:
+    lb $t1, 0($t0)        # Load byte from buffer
+    beqz $t1, start_copy_str  # Break if null terminator is found
+    addi $t0, $t0, 1      # Move to the next byte
+    j find_end_str
+
+start_copy_str:
     # Start copying the string from $a0 into the buffer
     move $t2, $a0         # $t2 points to the string to concatenate
-copy_loop:
+copy_loop_str:
     lb $t3, 0($t2)        # Load byte from the source string
-    beqz $t3, end_copy    # Break if null terminator is found
+    beqz $t3, end_copy_str    # Break if null terminator is found
     sb $t3, 0($t0)        # Store the byte into the buffer
     addi $t2, $t2, 1      # Move to the next byte in the string
     addi $t0, $t0, 1      # Move to the next byte in the buffer
-    j copy_loop
+    j copy_loop_str
 
-end_copy:
+end_copy_str:
     # Add null terminator to the buffer
     sb $zero, 0($t0)      # Null terminator at the end of the buffer
     jr $ra                # Return to the caller
 """;
 
-    private String concatInteger = """
-int_to_string_concat:
-    # Step 1: Find the null terminator in the buffer
-    move $t0, $a1           # $t0 points to the buffer address
-find_null:
-    lb $t1, 0($t0)          # Load the current byte from the buffer
-    beq $t1, $zero, convert # If null terminator is found, jump to convert
-    addi $t0, $t0, 1        # Move to the next character
-    j find_null
 
-convert:
+    private String concatInteger = """
+concat_string_int:
+    # Step 1: Find the null terminator in the buffer
+    la $t0 , _B_  # $t0 points to the buffer address
+find_null_int:
+    lb $t1, 0($t0)          # Load byte from the buffer
+    beq $t1, $zero, convert_int # If null terminator is found, jump to convert
+    addi $t0, $t0, 1        # Move to the next character
+    j find_null_int
+
+convert_int:
     # Step 2: Convert the integer in $a0 to its string representation
     move $t2, $a0           # Copy the integer to $t2 for conversion
     li $t3, 10              # $t3 = 10 (to get digits via modulo)
     addi $sp, $sp, -16      # Reserve stack space for the digits
     move $t4, $sp           # $t4 will store the digits in reverse order
 
-convert_loop:
-    beq $t2, $zero, append  # If integer is 0, jump to append
+convert_loop_int:
+    beq $t2, $zero, append_int  # If integer is 0, jump to append
     div $t2, $t3            # Divide $t2 by 10
     mfhi $t5                # Get the remainder (last digit)
     addi $t5, $t5, 48       # Convert the digit to ASCII (add '0')
     sb $t5, 0($t4)          # Store the ASCII character on the stack
     addi $t4, $t4, -1       # Move to the next stack position
     mflo $t2                # Update $t2 with the quotient
-    j convert_loop
+    j convert_loop_int
 
-append:
+append_int:
     addi $t4, $t4, 1        # Adjust $t4 to the first digit (stack pointer)
-append_loop:
+append_loop_int:
     lb $t5, 0($t4)          # Load the digit from the stack
-    beq $t5, $zero, finalize # If null terminator, jump to finalize
+    beq $t5, $zero, finalize_int # If null terminator, jump to finalize
     sb $t5, 0($t0)          # Store the digit in the buffer
     addi $t4, $t4, 1        # Move to the next digit
     addi $t0, $t0, 1        # Move to the next position in the buffer
-    j append_loop
+    j append_loop_int
 
-finalize:
+finalize_int:
     sb $zero, 0($t0)        # Append null terminator at the end of the string
     addi $sp, $sp, 16       # Restore the stack
     jr $ra                  # Return to caller
-
 """;
+
+
 
     //set up a register
     public Register setRegister(String register,Object val){
@@ -218,6 +222,10 @@ finalize:
             for (String instruction : this.mainCalls) {
                 writer.write(instruction);
                 writer.newLine(); // Add a newline after each instruction
+            }
+            if(addConcats){
+                writer.write(concatString);
+                writer.write(concatInteger);
             }
             System.out.println("TAC instructions have been written to " + filePath);
         } catch (IOException e) {
@@ -591,5 +599,78 @@ finalize:
         instructions.add("\t".repeat(tabCounter) + "li $v0 , "+ mode);
         instructions.add("\t".repeat(tabCounter) + "syscall");
 
+    }
+
+    public void concatString (String str){
+        addConcats = true;
+        if(!hasStringBuffer){ //no string buffer yet? create it
+            hasStringBuffer = true;
+            dataHeader.add("_B_ : .space 200");
+        }
+        //check that the requiered registers are free, otherwise save into pointer
+        int offset = 0;
+        String checkList[] = {"$t0", "$t1","$t2","$t3","$a0" };
+        HashMap<String,String> recoverAddres = new HashMap<>();
+        for (String register: checkList){
+            if(registerDescription.getOrDefault(register,null) != null){
+                recoverAddres.put(register,offset+"($sp)");
+                offset += calculateSize(registerDescription.get(register));
+            }
+        }
+        if(offset > 0){
+            reserveOnStack(offset);
+        }
+        for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
+            loadWord(rec.getKey(),rec.getValue());
+            saveWordInto(offset+"($sp)",rec.getKey());
+        }
+        loadAddres("$a0",getConstantLabel(str));
+        jumpAndLink("concat_string_str");
+        for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
+            loadWord(rec.getKey(),rec.getValue());
+        }
+        if(offset > 0){
+            releaseOnStack(offset);
+        }
+    }
+    public void concatInteger (Object val){
+        addConcats = true;
+        if(!hasStringBuffer){ //no string buffer yet? create it
+            hasStringBuffer = true;
+            dataHeader.add("_B_ : .space 200");
+        }
+        //check that the requiered registers are free, otherwise save into pointer
+        if (val instanceof Register v){
+            moveInto("$a0",v.pointer);
+            releaseRegister(v.pointer);
+        }else{
+            Register tmp = createTemporal(val);
+            loadInmediate(tmp.pointer,val);
+            moveInto("$a0",tmp.pointer);
+            releaseRegister(tmp.pointer);
+        }
+        int offset = 0;
+        String checkList[] = {"$t0", "$t1","$t2","$t3","$t4","$t5","$a0" };
+        HashMap<String,String> recoverAddres = new HashMap<>();
+        for (String register: checkList){
+            if(registerDescription.getOrDefault(register,null) != null){
+                recoverAddres.put(register,offset+"($sp)");
+                offset += calculateSize(registerDescription.get(register));
+            }
+        }
+        if(offset > 0){
+            reserveOnStack(offset);
+        }
+        for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
+            loadWord(rec.getKey(),rec.getValue());
+            saveWordInto(offset+"($sp)",rec.getKey());
+        }
+        jumpAndLink("concat_string_int");
+        for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
+            loadWord(rec.getKey(),rec.getValue());
+        }
+        if(offset > 0){
+            releaseOnStack(offset);
+        }
     }
 }
