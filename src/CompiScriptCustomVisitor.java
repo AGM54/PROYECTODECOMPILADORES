@@ -445,7 +445,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         new HashMap<>() {{
                             put("type", new Param());
                             put("scope", ScopesStack.peek());
-                            put("function", currCallName);
+                            put("function",CurrFuncName );
                         }});
             } else {
                 Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");

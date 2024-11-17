@@ -197,7 +197,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     mips.moveInto(tmp.pointer, r.pointer);
                     result = tmp;
                 }
-                mips.releaseRegister(r.pointer);
             } else if(result instanceof Param param){
                 result = new Register(param.pointerRef,param.getTypeInstnce());
             }
@@ -228,7 +227,9 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             // Generate a new temporary register for the result
             Register temp = null;
             Object rType = result instanceof Register ? ((Register) result).value : result;
+            rType = rType instanceof Variable ? ((Variable) rType).value : rType;
             Object nType = nextFactor instanceof Register ? ((Register) nextFactor).value : nextFactor;
+            nType = nType instanceof Variable ? ((Variable) nType).value : nType;
             // Translate '+' and '-' into MIPS 'add' and 'sub' instructions
             switch (op) {
                 case "+":
@@ -240,7 +241,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         }
                         mips.sum(temp, result, nextFactor);
                     } else { //string concatenations
-
+                        temp = mips.createTemporal(String.valueOf(rType) + String.valueOf(nType));
                     }
                     break;
                 case "-":
@@ -290,7 +291,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     result = tmp;
                     mips.releaseRegister(tmp.pointer);
                 }
-                mips.releaseRegister(r.pointer);
             }else if(result instanceof Param param){
                 result = new Register(param.pointerRef,param.getTypeInstnce());
             }
@@ -311,7 +311,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     nextUnary = tmp;
                     mips.releaseRegister(tmp.pointer);
                 }
-                mips.releaseRegister(r.pointer);
             }else if(nextUnary instanceof Param param){
                 nextUnary = new Register(param.pointerRef,param.getTypeInstnce());
             }
@@ -332,6 +331,12 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     break;
             }
             // Update the result to the current temporary
+            if (result instanceof  Register r){
+                mips.releaseRegister(r.pointer);
+            }
+            if (nextUnary instanceof Register r) {
+                mips.releaseRegister(r.pointer);
+            }
             result = temp;
 
         }
@@ -399,10 +404,11 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
                 }else{
                     Register valPointer = mips.createTemporal(val);
-                    mips.loadInmediate(valPointer.pointer,name);
+                    mips.loadInmediate(valPointer.pointer,val);
                     mips.releaseRegister(valPointer.pointer);
                     mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
                 }
+                mips.releaseRegister(save.pointer);
             }
         }
         currentInstanceName = "";
@@ -415,7 +421,32 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         if (ctx.logic_or() != null) {
             return visit(ctx.logic_or());
         } else if (ctx.call() != null) {
+            Object visit = visit(ctx.call()); //
+            // it must be a "this call"
+            if (visit instanceof ThisDirective){
+                String name =CurrClasName + "." +  ctx.getChild(2).getText();
+                mips.setRegister(ST.get(name).get("offset") +"($a0)",ST.get(name).get("type"));
+                Register self = new  Register(ST.get(name).get("offset") +"($a0)",ST.get(name).get("type"));
 
+                Object val = visit(ctx.assignment());
+                if (val instanceof Register v) {
+                    mips.saveWordInto(self.pointer, v.pointer);
+                    mips.releaseRegister(v.pointer);
+                } else if (val instanceof String s) {
+                    String ref = mips.getConstantLabel(s);
+                } else if(val instanceof Param param){
+                    if (val instanceof String s) {
+
+                    }else{
+                        mips.saveWordInto(self.pointer, param.pointerRef);
+                    }
+                }else {
+                    Register temp = mips.createTemporal(val);
+                    mips.loadInmediate(temp.pointer, val);
+                    mips.saveWordInto(self.pointer, temp.pointer);
+                    mips.releaseRegister(temp.pointer);
+                }
+            }
         } else {
             String varName = ctx.IDENTIFIER().getText();
             currentInstanceName = varName;
@@ -427,7 +458,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     Register saveReg = mips.createSave(null); // no value ( for now )
                     mips.loadAddres(saveReg.pointer, name);
                     if (val instanceof Register v) {
-                        mips.saveWordInto(0 + saveReg.pointer, v.pointer);
+                        mips.saveWordInto("0(" + saveReg.pointer + ")" , v.pointer);
                         mips.releaseRegister(v.pointer);
                     } else if (val instanceof String s) {
                         String ref = mips.getConstantLabel(s);
@@ -435,6 +466,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         Register temp = mips.createTemporal(val);
                         mips.loadInmediate(temp.pointer, val);
                     }
+                    mips.releaseRegister(saveReg.pointer);
                 }
             }
         }
@@ -470,7 +502,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     mips.moveInto(tmp.pointer, r.pointer);
                     left = tmp;
                 }
-                mips.releaseRegister(r.pointer);
             }else if(left instanceof Param param){
                 left = new Register(param.pointerRef,param.getTypeInstnce());
             }
@@ -502,7 +533,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     mips.moveInto(tmp.pointer, r.pointer);
                     right = tmp;
                 }
-                mips.releaseRegister(r.pointer);
             }
             else if(right instanceof Param param){
                 right = new Register(param.pointerRef,param.getTypeInstnce());
@@ -606,7 +636,10 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             Register tmp = mips.createTemporal(((Register) right).value);
             switch (operator){
                 case ">=" -> {
-                    mips.lessThan(tmp.pointer,((Register) right).pointer,((Register) left).pointer);
+                    String inverse = mips.quitInverse();
+                    mips.equals(((Register) right).pointer ,((Register) left).pointer);
+                    mips.addInverse(inverse);
+                    mips.lessThan(tmp.pointer,((Register) right).pointer ,((Register) left).pointer);
                     mips.notEquals(tmp.pointer,mips.zero.pointer);
                 }
                 case "<=" -> {
@@ -696,17 +729,16 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         String labelTrue = mips.generateLabel();
         String labelElse = "";
         String labelEnd = mips.generateLabel();
-
+        if (ctx.statement(1) != null) {
+            labelElse = mips.generateLabel();
+            mips.addInverse(labelElse);
+        }else{
+            mips.addInverse(labelEnd);
+        }
         // Visit the condition expression
         mips.addJump(labelTrue);
 
-        if (ctx.statement(1) != null) {
-            labelElse = mips.generateLabel();
-            mips.addInverse(inverseLabel);
-        }else{
-            inverseLabel = labelEnd;
-            mips.addInverse(inverseLabel);
-        }
+
 
         visit(ctx.expression());
         mips.quitInverse();
@@ -738,6 +770,44 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
 
         // End label
         mips.pushLabel(labelEnd);
+        return null;
+    }
+
+    @Override
+    public String visitForStmt(CompiScriptParser.ForStmtContext ctx) {
+        // Generate labels
+        String startLabel = mips.generateLabel();
+        String endLabel = mips.generateLabel();
+
+        // Visit initialization
+        if (ctx.varDecl() != null) {
+            visit(ctx.varDecl()); // Correct initialization
+        } else if (ctx.exprStmt() != null) {
+            visit(ctx.exprStmt());
+        }
+        // Start of the loop
+        mips.pushLabel(startLabel);
+        mips.tabsIncrease();
+        // Visit the condition expression (if present)
+        if (ctx.expression(0) != null) {
+            mips.addInverse(endLabel);
+            String exprResult = String.valueOf(visit(ctx.expression(0)));
+            mips.quitInverse();
+        }
+
+        //visit the body
+        visit(ctx.statement());
+
+        // Visit the increment expression (if present)
+        if (ctx.expression(1) != null) {
+            visit(ctx.expression(1)); // Visit increment statement
+        }
+
+        //the jump into the loop start
+        mips.jumpTo(startLabel);
+        // End of the loop
+        mips.tabsDecrease();
+        mips.pushLabel(endLabel);
         return null;
     }
 
@@ -1047,7 +1117,8 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         else if (primary instanceof ThisDirective){
             String name =CurrClasName + "." + ctx.IDENTIFIER().getFirst().getText();
             if(ST.containsKey(name)){
-                return ST.get(name).get("offset") +"($a0)";
+                mips.setRegister(ST.get(name).get("offset") +"($a0)",ST.get(name).get("type"));
+                return new Register(ST.get(name).get("offset") +"($a0)",ST.get(name).get("type"));
             }else{
                 //is a method call
             }
@@ -1106,7 +1177,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                             for (int j = 0; j< arguments.getChildCount(); j += 2) {
                                 Object arg = visit(arguments.getChild(j));
                                 Register argRegister = mips.createArgument(arg);
-                                if (argsCounter < 4){
+                                if (argsCounter < 5){
                                     mips.SwitchToTemporalInstructionsSet();
                                     if (arg instanceof Variable var) {
                                         Register pointerVar = mips.getRegister(arg);
@@ -1144,7 +1215,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                                 }
                             }
                         }
-                        if(argsCounter > 3){
+                        if(argsCounter > 4){
                             mips.reserveOnStack(stackReserve);
                             mips.SwitchToLocal();
                             mips.PushTemporalInstructions();

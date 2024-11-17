@@ -1,8 +1,8 @@
-fun fibonacci(n){
-    if ( n <= 1 ) {
+fun factorial(n){
+    if ( n == 0 ) {
         return 1;
     }
-    return fibonacci(n-1) + fibonacci(n-2);
+    return n * factorial(n-1);
 }
-var x = fibonacci(5);
+var x = factorial(5);
 print x;

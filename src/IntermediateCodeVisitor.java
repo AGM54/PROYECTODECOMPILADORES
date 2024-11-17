@@ -374,12 +374,12 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         if (ctx.statement(1) != null) {
             labelElse = generateLabel();
             inverseLabel = labelElse;
-        }else{
+        } else {
             inverseLabel = labelEnd;
         }
 
         String condition = String.valueOf(visit(ctx.expression()));
-        inverseLabel="";
+        inverseLabel = "";
         LabelStack.pop();
 
         // Generate TAC for the condition
@@ -390,7 +390,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         visit(ctx.statement(0));  // The first statement is the 'if' body
 
         // Jump to end if true
-        if(!instructions.getLast().split(" ")[0].strip().stripIndent().startsWith("j")){
+        if (!instructions.getLast().split(" ")[0].strip().stripIndent().startsWith("j")) {
             instructions.add("\t".repeat(tabCounter) + "j " + labelEnd);
         }
 

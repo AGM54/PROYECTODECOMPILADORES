@@ -101,8 +101,82 @@ public class MipsInstructionsGenerator {
         if(register.startsWith(("$t"))){
             tempPool.push(register);  // Return the temporary to the pool when done
         }
+        if(register.startsWith(("$s"))){
+            savePool.push(register);
+        }
         registerDescription.put(register,null);
     }
+
+    private String concatString = """
+concat_string:
+    # Find the end of the current buffer
+    move $t0, $a1         # $t0 points to the buffer
+find_end:
+    lb $t1, 0($t0)        # Load byte from buffer
+    beqz $t1, start_copy  # Break if null terminator is found
+    addi $t0, $t0, 1      # Move to the next byte
+    j find_end
+
+start_copy:
+    # Start copying the string from $a0 into the buffer
+    move $t2, $a0         # $t2 points to the string to concatenate
+copy_loop:
+    lb $t3, 0($t2)        # Load byte from the source string
+    beqz $t3, end_copy    # Break if null terminator is found
+    sb $t3, 0($t0)        # Store the byte into the buffer
+    addi $t2, $t2, 1      # Move to the next byte in the string
+    addi $t0, $t0, 1      # Move to the next byte in the buffer
+    j copy_loop
+
+end_copy:
+    # Add null terminator to the buffer
+    sb $zero, 0($t0)      # Null terminator at the end of the buffer
+    jr $ra                # Return to the caller
+""";
+
+    private String concatInteger = """
+int_to_string_concat:
+    # Step 1: Find the null terminator in the buffer
+    move $t0, $a1           # $t0 points to the buffer address
+find_null:
+    lb $t1, 0($t0)          # Load the current byte from the buffer
+    beq $t1, $zero, convert # If null terminator is found, jump to convert
+    addi $t0, $t0, 1        # Move to the next character
+    j find_null
+
+convert:
+    # Step 2: Convert the integer in $a0 to its string representation
+    move $t2, $a0           # Copy the integer to $t2 for conversion
+    li $t3, 10              # $t3 = 10 (to get digits via modulo)
+    addi $sp, $sp, -16      # Reserve stack space for the digits
+    move $t4, $sp           # $t4 will store the digits in reverse order
+
+convert_loop:
+    beq $t2, $zero, append  # If integer is 0, jump to append
+    div $t2, $t3            # Divide $t2 by 10
+    mfhi $t5                # Get the remainder (last digit)
+    addi $t5, $t5, 48       # Convert the digit to ASCII (add '0')
+    sb $t5, 0($t4)          # Store the ASCII character on the stack
+    addi $t4, $t4, -1       # Move to the next stack position
+    mflo $t2                # Update $t2 with the quotient
+    j convert_loop
+
+append:
+    addi $t4, $t4, 1        # Adjust $t4 to the first digit (stack pointer)
+append_loop:
+    lb $t5, 0($t4)          # Load the digit from the stack
+    beq $t5, $zero, finalize # If null terminator, jump to finalize
+    sb $t5, 0($t0)          # Store the digit in the buffer
+    addi $t4, $t4, 1        # Move to the next digit
+    addi $t0, $t0, 1        # Move to the next position in the buffer
+    j append_loop
+
+finalize:
+    sb $zero, 0($t0)        # Append null terminator at the end of the string
+    addi $sp, $sp, 16       # Restore the stack
+    jr $ra                  # Return to caller
+
+""";
 
     //set up a register
     public Register setRegister(String register,Object val){
@@ -336,24 +410,32 @@ public class MipsInstructionsGenerator {
     }
     public void mult(Register save, Object left , Object right ){
         if (right instanceof Number) {
-            right = createTemporal(right);
-            releaseRegister(((Register) right).pointer);
+            Register righty = createTemporal(right);
+            loadInmediate(righty.pointer,right);
+            releaseRegister(righty.pointer);
+            right = righty;
         }
         if (left instanceof Number) {
-            left = createTemporal(left);
-            releaseRegister(((Register) left).pointer);
+            Register lefty = createTemporal(left);
+            loadInmediate(lefty.pointer,left);
+            releaseRegister(lefty.pointer);
+            left = lefty;
         }
         instructions.add("\t".repeat(tabCounter) + "mul " + save.pointer + ", " +
                 ((Register) left).pointer + ", " + ((Register) right).pointer);
     }
     public void div(Register save, Object left , Object right ){
         if (right instanceof Number) {
-            right = createTemporal(right);
-            releaseRegister(((Register) right).pointer);
+            Register righty = createTemporal(right);
+            loadInmediate(righty.pointer,right);
+            releaseRegister(righty.pointer);
+            right = righty;
         }
         if (left instanceof Number) {
-            left = createTemporal(left);
-            releaseRegister(((Register) left).pointer);
+            Register lefty = createTemporal(left);
+            loadInmediate(lefty.pointer,left);
+            releaseRegister(lefty.pointer);
+            left = lefty;
         }
         assert left instanceof Register;
         assert right instanceof Register;
@@ -363,12 +445,16 @@ public class MipsInstructionsGenerator {
     }
     public void mod(Register save, Object left , Object right ){
         if (right instanceof Number) {
-            right = createTemporal(right);
-            releaseRegister(((Register) right).pointer);
+            Register righty = createTemporal(right);
+            loadInmediate(righty.pointer,right);
+            releaseRegister(righty.pointer);
+            right = righty;
         }
         if (left instanceof Number) {
-            left = createTemporal(left);
-            releaseRegister(((Register) left).pointer);
+            Register lefty = createTemporal(left);
+            loadInmediate(lefty.pointer,left);
+            releaseRegister(lefty.pointer);
+            left = lefty;
         }
         assert left instanceof Register;
         assert right instanceof Register;
@@ -394,13 +480,17 @@ public class MipsInstructionsGenerator {
     }
 
     public void equals(String left, String right){
-        instructions.add("\t".repeat(tabCounter)  + "beq " +left + " , " + right + " , " + jumpLabels.peek());
+        if(!jumpLabels.isEmpty()) {
+            instructions.add("\t".repeat(tabCounter) + "beq " + left + " , " + right + " , " + jumpLabels.peek());
+        }
         if(!jumpInverseLabels.isEmpty()){
             instructions.add("\t".repeat(tabCounter)  + "bne " +left + " , " + right + " , " + jumpInverseLabels.peek());
         }
     }
     public void notEquals(String left, String right){
-        instructions.add("\t".repeat(tabCounter)  + "bne " +left + " , " + right + " , " + jumpLabels.peek());
+        if(!jumpLabels.isEmpty()) {
+            instructions.add("\t".repeat(tabCounter) + "bne " + left + " , " + right + " , " + jumpLabels.peek());
+        }
         if(!jumpInverseLabels.isEmpty()){
             instructions.add("\t".repeat(tabCounter)  + "beq " +left + " , " + right + " , " + jumpInverseLabels.peek());
         }
@@ -445,6 +535,7 @@ public class MipsInstructionsGenerator {
             return;
         }
         if (val instanceof Register reg){
+            releaseRegister(reg.pointer);
             PrintValue(reg.value,reg.pointer);
             return;
         }
@@ -453,6 +544,7 @@ public class MipsInstructionsGenerator {
             mode = 1;
             if (!refPoint.isBlank()){
                 instructions.add("\t".repeat(tabCounter) + "move $a0 , "+ refPoint);
+                releaseRegister(refPoint);
             }else{
                 instructions.add("\t".repeat(tabCounter) + "li $a0 , "+ val);
             }
@@ -460,6 +552,7 @@ public class MipsInstructionsGenerator {
             mode = 2;
             if (!refPoint.isBlank()){
                 instructions.add("\t".repeat(tabCounter) + "move $f12 , "+ refPoint);
+                releaseRegister(refPoint);
             }else{
                 instructions.add("\t".repeat(tabCounter) + "li $f12 , "+ val);
             }
@@ -467,6 +560,7 @@ public class MipsInstructionsGenerator {
             mode = 3;
             if (!refPoint.isBlank()){
                 instructions.add("\t".repeat(tabCounter) + "move $f12 , "+ refPoint);
+                releaseRegister(refPoint);
             }else{
                 instructions.add("\t".repeat(tabCounter) + "li $f12 , "+ val);
             }
@@ -477,6 +571,7 @@ public class MipsInstructionsGenerator {
                 mode = 4;
                 if (!refPoint.isBlank()){
                     instructions.add("\t".repeat(tabCounter) + "move $a0 , "+ refPoint);
+                    releaseRegister(refPoint);
                 }else{
                     //check if is a register, if so it might have the string value
                     if(StringConstants.containsKey(String.valueOf(val))){ //is it a constant string?
