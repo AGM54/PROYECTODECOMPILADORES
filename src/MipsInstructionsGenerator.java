@@ -577,22 +577,20 @@ finalize_int:
 
             }else{
                 mode = 4;
-                if (!refPoint.isBlank()){
-                    instructions.add("\t".repeat(tabCounter) + "move $a0 , "+ refPoint);
+                if (!refPoint.isBlank()){     //check if is a register, if so it might have the string value  , so release it
                     releaseRegister(refPoint);
-                }else{
-                    //check if is a register, if so it might have the string value
-                    if(StringConstants.containsKey(String.valueOf(val))){ //is it a constant string?
-                        instructions.add("\t".repeat(tabCounter) + "la $a0 , "
-                                + StringConstants.get(String.valueOf(val)));
-                    } //if not, assume is in the buffer space on .data
-                    else{
-                        if(!hasStringBuffer){ //no string buffer yet? create it
-                            hasStringBuffer = true;
-                            dataHeader.add("_B_ : .space 200");
-                        }
-                        instructions.add("\t".repeat(tabCounter) + "la $a0 , _B_");
+                }
+
+                if(StringConstants.containsKey(String.valueOf(val))){ //is it a constant string?
+                    instructions.add("\t".repeat(tabCounter) + "la $a0 , "
+                            + StringConstants.get(String.valueOf(val)));
+                } //if not, assume is in the buffer space on .data
+                else{
+                    if(!hasStringBuffer){ //no string buffer yet? create it
+                        hasStringBuffer = true;
+                        dataHeader.add("_B_ : .space 200");
                     }
+                    instructions.add("\t".repeat(tabCounter) + "la $a0 , _B_");
                 }
             }
         }
@@ -621,8 +619,7 @@ finalize_int:
             reserveOnStack(offset);
         }
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
-            loadWord(rec.getKey(),rec.getValue());
-            saveWordInto(offset+"($sp)",rec.getKey());
+            saveWordInto(rec.getValue(),rec.getKey());
         }
         loadAddres("$a0",getConstantLabel(str));
         jumpAndLink("concat_string_str");
@@ -663,7 +660,7 @@ finalize_int:
         }
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
             loadWord(rec.getKey(),rec.getValue());
-            saveWordInto(offset+"($sp)",rec.getKey());
+            saveWordInto(rec.getValue(),rec.getKey());
         }
         jumpAndLink("concat_string_int");
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){

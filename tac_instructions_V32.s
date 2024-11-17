@@ -1,27 +1,53 @@
 .data
-i: .word 0
-_S0_ : .asciiz "hello"
+i: .word 2
+_S0_ : .asciiz " es par"
 _B_ : .space 200
+_S1_ : .asciiz " es impar"
 #-----MAIN LOOP -----
 .text
 .globl main
 main:
 la $s0 , i
-li $t0 , 0
+li $t0 , 1
 sw $t0 , 0($s0)
-lw $t0 , i
-sub $sp, $sp, 4
-lw $t0 , 0($sp)
-sw $t0 , 4($sp)
-la $a0 , _S0_
-jal concat_string_str
-lw $t0 , 0($sp)
-add $sp, $sp, 4
-move $a0 , $t0
-jal concat_string_int
-move $a0 , $t0
-li $v0 , 4
-syscall
+L_0:
+	lw $t0 , i
+	li $t1 , 5
+	slt $t2 , $t0 , $t1
+	beq $t2 , $zero , L_1
+	lw $t2 , i
+	li $t0 , 2
+	div $t2, $t0
+	mfhi $t1
+	li $t2 , 0
+	beq $t1 , $t2 , L_2
+	bne $t1 , $t2 , L_4
+	L_2:
+		lw $t2 , i
+		move $a0 , $t2
+		jal concat_string_int
+		la $a0 , _S0_
+		jal concat_string_str
+		la $a0 , _B_
+		li $v0 , 4
+		syscall
+		j L_3
+	L_4:
+		lw $t2 , i
+		move $a0 , $t2
+		jal concat_string_int
+		la $a0 , _S1_
+		jal concat_string_str
+		la $a0 , _B_
+		li $v0 , 4
+		syscall
+	L_3:
+	lw $t2 , i
+	addi $t2, $t2, 1
+	la $s0 , i
+	sw $t2 , 0($s0)
+	j L_0
+L_1:
 li $v0, 10
 syscall
 #-----MAIN TERMINATION-----
