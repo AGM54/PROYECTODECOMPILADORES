@@ -251,6 +251,22 @@ clear_done:
             System.err.println("Error writing to file: " + e.getMessage());
         }
     }
+    public List<String> getMipsIns(){
+        this.dataHeader.add("#-----MAIN LOOP -----");
+        this.dataHeader.addAll(this.mainCalls);
+        this.mainCalls = this.dataHeader;
+        this.mainCalls.add("li $v0, 10"); //the program termination command
+        this.mainCalls.add("syscall");
+        this.mainCalls.add("#-----MAIN TERMINATION-----");
+        this.mainCalls.add("#-----FUNCTIONS-----");
+        this.mainCalls.addAll(jumpCalls);
+        if(addConcats){
+            mainCalls.add(concatString);
+            mainCalls.add(concatInteger);
+            mainCalls.add(bufferCleaning);
+        }
+        return  this.mainCalls;
+    }
     public void SwitchToMain(){
         this.instructions = this.mainCalls;
     }

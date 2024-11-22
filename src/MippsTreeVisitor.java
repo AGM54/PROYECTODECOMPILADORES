@@ -39,6 +39,10 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         mips.writeToFile(filePath);
     }
 
+    public List<String> getInstructions(){
+        return mips.getMipsIns();
+    }
+
     private List<Map<String, Map<String, Object>>> search(String _search, Map<String, Map<String, Object>> to_search) {
         /*
             Searches and gets the List corresponding to the Class/Instance/var etc in the given table
