@@ -1,0 +1,31 @@
+.data
+i: .word 2
+.text
+.globl main
+main:
+la $s1, i
+li $t0, 1
+sw $t0, $s1
+L_0:
+slt $t0 i 5
+beq $t0 $zero L_1
+bne $t0 $zero L_2
+	L_1:
+	div i, 2
+	mfhi $t0
+	beq $t0 0 L_3
+	bne $t0 0 L_5
+	L_3:
+		concat $t0, i, " es par"
+		OUT $t0
+		j L_4
+	L_5:
+		concat $t0, i, " es impar"
+		OUT $t0
+	L_4:
+	add $t0, i, 1
+	la $s1, i
+	li $t0, $t0
+	sw $t0, $s1
+j L_0
+L_2:

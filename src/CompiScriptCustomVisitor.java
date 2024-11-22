@@ -6,76 +6,7 @@ import javax.lang.model.type.DeclaredType;
 import java.util.regex.Pattern;
 import java.util.*;
 
-class Function {
-    private  String funName;
-    private Boolean isRecursive = false;
-    private Object returnsType = null;
-    public Function(String funName){
-        this.funName = funName;
-    }
-    public  String getFunName(){
-        return this.funName;
-    }
-    private CompiScriptParser.FunctionContext ctx = null;
 
-    public void setCtx(CompiScriptParser.FunctionContext ctx) {
-        this.ctx = ctx;
-    }
-
-    public CompiScriptParser.FunctionContext getCtx() {
-        return ctx;
-    }
-
-    public void setIsRecursive(){
-        isRecursive = true;
-    }
-    public Boolean getIsRecursive(){
-        return isRecursive;
-    }
-    public void setReturnsType(Object returnsType){
-        this.returnsType = returnsType;
-    }
-    public Object getReturnsType(){
-        return this.returnsType;
-    }
-} //a function
-class Class {} // a class , no rocket science
-class Instance{
-    private String clasName;
-    private String lookUpName;
-    Instance(String classname,String lookUpName){this.clasName = classname;this.lookUpName = lookUpName;}
-    public String getClasName() {
-        return clasName;
-    }
-    public String getLookUpName(){
-        return  lookUpName;
-    }
-}
-class Undefined {} //variables that only have been declared, but no value assigned
-class Method extends Function{
-    public Method(String functionName) {
-        super(functionName);
-    }
-}  //for methods , functions inside a class
-class Unknown {} //for all symbols that were not found
-class ThisDirective{}
-class SuperConstructor {
-    private String Identifier;
-    public SuperConstructor(String Identifier){
-        this.Identifier = Identifier;
-    }
-    public String getIdentifier(){
-        return this.Identifier;
-    }
-}
-class Param{
-    private Object typeInstnce = null;
-
-    public void setTypeInstnce(Object typeInstnce) {
-        this.typeInstnce = typeInstnce;
-    }
-    public Object getTypeInstnce() {return typeInstnce;}
-} //for the parameters, will be assumed as correct when function is declared
 public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //Stack para los contextos
     private Stack<String> ScopesStack = new Stack<>(){{push("0");}};
@@ -500,6 +431,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
         String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functsMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -514,6 +447,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         new HashMap<>() {{
                             put("type", new Param());
                             put("scope", ScopesStack.peek());
+                            put("function",CurrFuncName );
                         }});
             } else {
                 Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(param).get("type");
@@ -525,13 +459,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             }
         }
         Object returner = visitChildren(ctx);
-        if (returner!=null) {
+        if(returner != null) {
             if (CurrClasName.isEmpty()) {
                 ((Function) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
             } else {
                 ((Method) scopedDeclaredFunctions.get(originalScope).get(CurrFuncName).get("type")).setReturnsType(returner);
             }
         }
+
         CurrFuncName = "";
         // Pop the Scope after processing
         String lastScope = ScopesStack.pop();
@@ -563,6 +498,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 for (Map.Entry<String, Map<String, Object>> entry : lastDeclaredSymbol.entrySet()) {
                     String key = entry.getKey(); // Extract the key (String)
                     Map<String, Object> value = entry.getValue(); // Extract the value (Map<String, Object>)
+
                     // Insert into the scoped symbol table
                     value.put("scope", ScopesStack.peek());
                     scopedParametersDeclarations.get(ScopesStack.peek()).put(key, value);
@@ -592,6 +528,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
         return null;
     }
+
 
     //anonimous function block
     @Override
@@ -642,8 +579,15 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     //the return statement
     @Override
     public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx) {
+
         if (ctx.expression()!= null) {
-            return visit(ctx.expression());
+            Object express = visit(ctx.expression());
+            if (express != null){
+                for(String stack : scopedDeclaredFunctions.keySet()){
+                    ( ( Function)scopedDeclaredFunctions.get(stack).get(CurrFuncName).get("type") ).setReturnsType(express);
+                }
+            }
+            return express;
         }
         // a simple return , return a null
         return null;
@@ -689,12 +633,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                         // Insert new scope into the symbol table maps
                         String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                        symbolMap.putAll(originalSymbols);
                         scopedDeclaredFunctions.put(newScope, functMap);
                         scopedSymbolTable.put(newScope, symbolMap);
                         scopedDeclaredClasses.put(newScope, classMap);
                         scopedParametersDeclarations.put(newScope, paramMap);
                         // Push the new Scope into the stack
-                        ScopesStack.push(newScope);
+                        ScopesStack.push(getNewScope(newScope));
                         //push the parameters into the scope
                         for (int i = 0; i < requParams.size(); i++) {
                             String paramName = requParams.get(i).toString();
@@ -706,6 +652,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                 setTypeInstnce(type);
                                             }});
                                             put("scope", ScopesStack.peek());
+                                            put("function", currCallName);
                                         }});
                             } else {
                                 Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -722,8 +669,15 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     if(!CurrFuncName.isEmpty()){
                         //add the recursive flag
                         ( ( Function)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                        ( ( Function)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).recursiveInstances += 1;
+                    }
+                    if( ((Function) primary).getReturnsType() != null ) {
+                        return ((Function) primary).getReturnsType();
                     }
                     return new Param();
+                }
+                if( ((Function) primary).getReturnsType() != null ) {
+                    return ((Function) primary).getReturnsType();
                 }
             }
             if (primary instanceof  ThisDirective) {
@@ -764,6 +718,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                     // Insert new scope into the symbol table maps
                                     String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                    Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                    symbolMap.putAll(originalSymbols);
                                     scopedDeclaredFunctions.put(newScope, functMap);
                                     scopedSymbolTable.put(newScope, symbolMap);
                                     scopedDeclaredClasses.put(newScope, classMap);
@@ -781,6 +737,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                             setTypeInstnce(type);
                                                         }});
                                                         put("scope", ScopesStack.peek());
+                                                        put("function", currCallName);
                                                     }});
                                         } else {
                                             Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -798,6 +755,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                 if(!CurrFuncName.isEmpty()){
                                     //add the recursive flag
                                     ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                                    ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).recursiveInstances += 1;
                                 }
                                 return new Param();
                             }
@@ -839,6 +797,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                             Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                             // Insert new scope into the symbol table maps
                                             String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                            Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                            symbolMap.putAll(originalSymbols);
                                             scopedDeclaredFunctions.put(newScope, functMap);
                                             scopedSymbolTable.put(newScope, symbolMap);
                                             scopedDeclaredClasses.put(newScope, classMap);
@@ -856,6 +816,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                                     setTypeInstnce(type);
                                                                 }});
                                                                 put("scope", ScopesStack.peek());
+                                                                put("function", currCallName);
                                                             }});
                                                 } else {
                                                     Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -873,6 +834,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                             if(!CurrFuncName.isEmpty()){
                                                 //add the recursive flag
                                                 ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).setIsRecursive();
+                                                ( ( Method)scopedDeclaredFunctions.get(ScopesStack.peek()).get(CurrFuncName).get("type") ).recursiveInstances += 1;
                                             }
                                             return new Param();
                                         }
@@ -948,7 +910,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         String method = ((Instance)lastDeclaration).getClasName() +
                                 "." + ctx.getChild(i).getText();
                         if(scopedSymbolTable.get(ScopesStack.peek()).containsKey(attr)){
-                            lastDeclaration = scopedSymbolTable.get(ScopesStack.peek())
+                            lastDeclaration =  scopedSymbolTable.get(ScopesStack.peek())
                                     .get(attr).get("type");
                         }
                         //maybe a method from the class ?
@@ -990,6 +952,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                 Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                 // Insert new scope into the symbol table maps
                                 String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                symbolMap.putAll(originalSymbols);
                                 scopedDeclaredFunctions.put(newScope, functMap);
                                 scopedSymbolTable.put(newScope, symbolMap);
                                 scopedDeclaredClasses.put(newScope, classMap);
@@ -1007,6 +971,7 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                                         setTypeInstnce(type);
                                                     }});
                                                     put("scope", ScopesStack.peek());
+                                                    put("function", currCallName);
                                                 }});
                                     } else {
                                         Param paramI = (Param) scopedParametersDeclarations.get(ScopesStack.peek()).get(paramName).get("type");
@@ -1035,6 +1000,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
 
         return returner;
+    }
+
+    private static String getNewScope(String newScope) {
+        return newScope;
     }
 
     //visit the arguments
@@ -1088,6 +1057,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));;
                     // Insert new scope into the symbol table maps
+                    Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                    symbolMap.putAll(originalSymbols);
                     scopedDeclaredFunctions.put(newScope, functMap);
                     scopedSymbolTable.put(newScope, symbolMap);
                     scopedDeclaredClasses.put(newScope, classMap);
@@ -1188,6 +1159,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -1656,6 +1629,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
         String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -1714,12 +1689,12 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
     public HashMap<String,Map<String,Object>> getFusedSymbolTable(){
         HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedSymbolTable.forEach((scope,table)->{
-            table.forEach((id,data)->{
-                if(scope.equals(data.get("scope"))){
-                    fusedST.put(id,data);
-                }
-            });
+            fusedST.putAll(table);
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedClassTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedDeclaredClasses.forEach((scope,table)->{
             table.forEach((id,data)->{
                 if(scope.equals(data.get("scope"))) {
@@ -1727,6 +1702,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             });
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedFunctionsTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedDeclaredFunctions.forEach((scope,table)->{
             table.forEach((id,data)->{
                 if(scope.equals(data.get("scope"))){
@@ -1734,10 +1713,31 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             });
         });
+        return fusedST;
+    }
+    public HashMap<String,Map<String,Object>> getFusedParametersTable(){
+        HashMap<String,Map<String,Object>> fusedST = new HashMap<>();
         scopedParametersDeclarations.forEach((scope,table)->{
             table.forEach((id,data)->{
-                if(scope.equals(data.get("scope"))) {
+                if(!fusedST.containsKey(id)){
                     fusedST.put(id,data);
+                } else if (
+                        ((Param) fusedST.get(id).get("type")).getTypeInstnce() == null &&
+                        ((Param) data.get("type")).getTypeInstnce() != null
+                ) {
+                    if (!fusedST.get(id).get("function").equals(data.get("function"))){
+                        if(fusedST.get(id).containsKey("functionMapping")){
+                            ((HashMap<String,Param>) fusedST.get(id).get("functionMapping")).put((String) data.get("function"),
+                                    ((Param) data.get("type")));
+                        }else{
+                            HashMap<String,Param> parMapping = new HashMap<>();
+                            parMapping.put((String) fusedST.get(id).get("function"),((Param) fusedST.get(id).get("type")));
+                            parMapping.put((String) data.get("function"),((Param) data.get("type")));
+                            fusedST.get(id).put("functionMapping",parMapping);
+                        }
+                    }else{
+                        fusedST.put(id,data);
+                    }
                 }
             });
         });

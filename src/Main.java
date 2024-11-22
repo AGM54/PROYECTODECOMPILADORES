@@ -2,13 +2,11 @@ import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 public class Main {
     public static void main(String[] args) {
         // Ruta del archivo fuente de CompiScript que deseas analizar
-        String inputFile = "src/test.txt";
+        String inputFile = "src/test2.txt";
 
         try {
             // Leer el archivo fuente
@@ -33,9 +31,14 @@ public class Main {
             CompiScriptCustomVisitor visitor = new CompiScriptCustomVisitor();
             visitor.visit(tree);
             visitor.printSymbols();
-            IntermediateCodeVisitor icVisitor = new IntermediateCodeVisitor(visitor.getFusedSymbolTable());
+            MippsTreeVisitor icVisitor = new MippsTreeVisitor(
+                    visitor.getFusedSymbolTable(),
+                    visitor.getFusedFunctionsTable(),
+                    visitor.getFusedClassTable(),
+                    visitor.getFusedParametersTable());
             icVisitor.visit(tree);
-            icVisitor.writeToFile("tac_instructions.txt");
+
+            icVisitor.writeToFile("tac_instructions_V32.s");
         } catch (IOException e) {
             e.printStackTrace();
         }

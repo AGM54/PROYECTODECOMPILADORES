@@ -14,16 +14,113 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     private int labelCount = 0; // Unique label counter
     private int tabCounter = 0;
     private int pointerCounter = 0;
+    private Stack<String> LabelStack = new Stack<>();
+    private String inverseLabel = "";
     // Generates a new temporary variable for expressions
-    private String newTemp() {
-        return "T_" + (tempCounter++);
-    }
+    private Stack<String> tempPool = new Stack<>();
+    private HashMap<String,Object> tmpTalbe = new HashMap<>();
+
+
+    private List<String> jumpCalls = new ArrayList<>();  // To store functions blocks
+    private List<String> mainCalls = new ArrayList<>();  // To store TAC instructions
+    private List<String> instructions = mainCalls;  // To store TAC instructions
 
     //the symbol table fused
     private HashMap<String, Map<String,Object>> ST ;
+    private HashMap<String, Map<String,Object>> FT ;
+    private HashMap<String, Map<String,Object>> CT ;
+    private HashMap<String, Map<String,Object>> PT ;
+    private Boolean inFunction = false;
+    private String newTemp(Object val) {
+        String tmp;
+        if (!tempPool.isEmpty()){
+            tmp = tempPool.pop();
+        }else{
+            tmp = "$t" + (tempCounter++);
+        }
+        tmpTalbe.put(tmp,val);
+        return tmp;
+    }
 
-    public IntermediateCodeVisitor(HashMap<String, Map<String,Object>> fusedSymbolTable){
+    private void releaseTemp(String temp) {
+        tmpTalbe.put(temp,null);
+        tempPool.push(temp);  // Return the temporary to the pool when done
+    }
+
+    private Object getTempVal(String temp){
+        return tmpTalbe.get(temp);
+    }
+
+
+    private List<Map<String,Map<String,Object>>> search (String _search){
+        Pattern regex = Pattern.compile(_search); // Compile the regex pattern
+        List<Map<String,Map<String,Object>>> results = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Object>> entry : this.CT.entrySet()) {
+            String keyName = entry.getKey(); // First key
+            if (regex.matcher(keyName).find()){
+                results.add(new HashMap<>(){{put(entry.getKey(),entry.getValue());}});
+            }
+        }
+        return results;
+    };
+    private void addVar (String name, Map<String,Object> value){
+        if(CT.containsKey(name.split("\\.")[0])){
+            return;
+        }
+        Object initialValue = value.get("type");
+        String javaType =  value.get("type").getClass().getSimpleName();
+        if(value.get("type") instanceof Instance){
+            String className = ((Instance) value.get("type")).getClasName();
+            for(Map<String, Map<String, Object>> entry : search(className)){
+                for (String key : entry.keySet()) {
+                    Map<String, Object> innerMap = entry.get(key);
+                    addVar(key.replace(className+".",((Instance) value.get("type")).getLookUpName() + "_"),innerMap);
+                    // Access values from the inner map using the key
+                }
+            };
+        } else if (value.get("type") instanceof Param || value.get("type") instanceof Class || value.get("type") instanceof Method || value.get("type") instanceof Function) {
+            return;
+        }else {
+
+            switch (javaType) {
+                case "Integer":
+                    instructions.add(name + ": .word " + initialValue);
+                    return;
+                case "Float":
+                    instructions.add(name + ": .float " + initialValue);
+                    return;
+                case "Double":
+                    instructions.add(name + ": .double " + initialValue);
+                    return;
+                case "Character":
+                    instructions.add(name + ": .byte '" + initialValue + "'");
+                    return;
+                case "Boolean":
+                    instructions.add(name + ": .byte " + ((Boolean) initialValue ? "1" : "0"));
+                    return;
+                case "String":
+                    instructions.add(name + ": .asciiz \"" + initialValue + "\"");
+                    return;
+                default:
+                    throw new IllegalArgumentException("Unsupported type: " + javaType);
+            }
+        }
+    }
+    public IntermediateCodeVisitor(HashMap<String, Map<String,Object>> fusedSymbolTable,
+                                   HashMap<String, Map<String,Object>> fusedFunctionsTable,
+                                   HashMap<String, Map<String,Object>> fusedClassesTable,
+                                   HashMap<String, Map<String,Object>> fusedParametersTable){
         this.ST = fusedSymbolTable;
+        this.FT = fusedFunctionsTable;
+        this.CT = fusedClassesTable;
+        this.PT = fusedParametersTable;
+        if(!ST.isEmpty()){
+            instructions.add(".data");
+            ST.forEach(this::addVar);
+            instructions.add(".text");
+            instructions.add(".globl main");
+            instructions.add("main:");
+        }
     }
     // Generates a pointer used for referencing an attribute of a class
     // is a place holder for "retrieving the memory direction"
@@ -32,11 +129,6 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     }
 
     // Helper function to generate TAC for an if condition
-    private String generateConditionTAC(String condition, String labelFalse) {
-        return "ifFalse " + condition + " goto " + labelFalse;
-    }
-
-    private List<String> instructions = new ArrayList<>();  // To store TAC instructions
 
     Pattern InstanceRegex = Pattern.compile("Instance@[0-9a-z]+");
     // Method to get the generated TAC instructions
@@ -51,7 +143,8 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     // Method to write TAC instructions to a file
     public void writeToFile(String filePath) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
-            for (String instruction : this.instructions) {
+            this.mainCalls.addAll(jumpCalls);
+            for (String instruction : this.mainCalls) {
                 writer.write(instruction);
                 writer.newLine(); // Add a newline after each instruction
             }
@@ -85,15 +178,76 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     // Arithmetic (term) +, -
     @Override
     public Object visitTerm(CompiScriptParser.TermContext ctx) {
+        // Check if there's only one factor; no need for temporary
+        if (ctx.factor().size() == 1) {
+            return visit(ctx.factor(0));
+        }
+
         String result = String.valueOf(visit(ctx.factor(0)));
-        // If there are additional factors with '+' or '-' operations
         for (int i = 1; i < ctx.factor().size(); i++) {
             String nextFactor = String.valueOf(visit(ctx.factor(i)));
             String op = ctx.getChild(2 * i - 1).getText();  // '+' or '-'
-            // Generate TAC for the operation
-            String temp = newTemp();
-            instructions.add("\t".repeat(tabCounter) +temp + ":= " + result + " " + op + " " + nextFactor);
-            result = temp;  // The result becomes the new temporary variable
+            String R = "", N = "";
+            if (result.startsWith("$t")) {
+                R = result;
+                result = String.valueOf( getTempVal(result) );
+                releaseTemp(R);
+            }
+            if (nextFactor.startsWith("$t")) {
+                N = nextFactor;
+                nextFactor = String.valueOf( getTempVal(nextFactor) );
+                releaseTemp(N);
+            }
+
+            if (ST.containsKey(result)){
+                R = result;
+                result = String.valueOf(ST.get(result).get("type"));
+
+            } else if (PT.containsKey(result) && inFunction) {
+                R = result;
+                Object v = PT.get(result).get("type");
+                result = String.valueOf(((Param) v).getTypeInstnce());
+            }
+            if (ST.containsKey(nextFactor)){
+                N = nextFactor;
+                nextFactor = String.valueOf(ST.get(nextFactor).get("type"));
+            }else if (PT.containsKey(nextFactor) && inFunction) {
+                N = nextFactor;
+                Object v = PT.get(nextFactor).get("type");
+                nextFactor = String.valueOf(((Param) v).getTypeInstnce());
+            }
+            // Generate a new temporary register for the result
+            String temp = "";
+
+            // Translate '+' and '-' into MIPS 'add' and 'sub' instructions
+            switch (op) {
+                case "+":
+                    if (result.startsWith("\"") || nextFactor.startsWith("\"") ){
+                        temp = newTemp( result + nextFactor);
+                        result = R.isBlank()? result : R;
+                        nextFactor = N.isBlank()? nextFactor : N;
+                        instructions.add("\t".repeat(tabCounter) + "concat " + temp + ", " + result + ", " + nextFactor);
+                    }else {
+                        temp = newTemp(Double.parseDouble(result)  + Double.parseDouble(nextFactor));
+                        result = R.isBlank()? result : R;
+                        nextFactor = N.isBlank()? nextFactor : N;
+                        instructions.add("\t".repeat(tabCounter) + "add " + temp + ", " + result + ", " + nextFactor);
+                    }
+                    break;
+                case "-":
+                    temp = newTemp(Double.parseDouble(result )  - Double.parseDouble(nextFactor));
+                    result = R.isBlank()? result : R;
+                    nextFactor = N.isBlank()? nextFactor : N;
+                    instructions.add("\t".repeat(tabCounter) + "sub " + temp + ", " + result + ", " + nextFactor);
+                    break;
+            }
+            // Update the result to the current temporary
+            result = temp;
+        }
+
+        // Release the final temporary register after use if necessary
+        if (result.startsWith("$t")) {
+            releaseTemp(result);
         }
 
         return result;
@@ -102,22 +256,50 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     // Visit factor: handles '*', '/', '%'
     @Override
     public Object visitFactor(CompiScriptParser.FactorContext ctx) {
-        // Visit the first unary
-        String result = String.valueOf(visit(ctx.unary(0)));
+        // Check if there's only one unary; no need for temporary
+        if (ctx.unary().size() == 1) {
+            return visit(ctx.unary(0));
+        }
 
-        // If there are additional unaries with '*', '/', '%' operations
+        String result = String.valueOf(visit(ctx.unary(0)));
         for (int i = 1; i < ctx.unary().size(); i++) {
             String nextUnary = String.valueOf(visit(ctx.unary(i)));
             String op = ctx.getChild(2 * i - 1).getText();  // '*', '/', '%'
 
-            // Generate TAC for the operation
-            String temp = newTemp();
-            instructions.add("\t".repeat(tabCounter) +temp + ":= " + result + " " + op + " " + nextUnary);
-            result = temp;  // The result becomes the new temporary variable
+            // Generate a new temporary register for the result
+            String temp = newTemp(0);
+            // Translate '*', '/', '%' into MIPS 'mul', 'div', and modulus instructions
+            switch (op) {
+                case "*":
+                    instructions.add("\t".repeat(tabCounter) + "mul " + temp + ", " + result + ", " + nextUnary);
+                    break;
+                case "/":
+                    // MIPS division: quotient is stored in $lo, remainder in $hi
+                    instructions.add("\t".repeat(tabCounter) + "div " + result + ", " + nextUnary);
+                    instructions.add("\t".repeat(tabCounter) + "mflo " + temp); // Move quotient to temp
+                    break;
+                case "%":
+                    // MIPS modulus: use the remainder from division, which is in $hi
+                    instructions.add("\t".repeat(tabCounter) + "div " + result + ", " + nextUnary);
+                    instructions.add("\t".repeat(tabCounter) + "mfhi " + temp); // Move remainder to temp
+                    break;
+            }
+            if (result.startsWith("$t")) {
+                releaseTemp(result);
+            }
+            // Update the result to the current temporary
+            result = temp;
+
+        }
+
+        // Release the final temporary register after use if necessary
+        if (result.startsWith("$t")) {
+            releaseTemp(result);
         }
 
         return result;
     }
+
 
     @Override
     public Object visitUnary(CompiScriptParser.UnaryContext ctx) {
@@ -127,8 +309,9 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
             String operand = String.valueOf(visit(ctx.unary()));
 
             // Generate TAC for the unary operation
-            String temp = newTemp();
-            instructions.add("\t".repeat(tabCounter) +temp + ":= " + op + " " + operand);
+            String temp = newTemp(op + operand);
+            instructions.add("\t".repeat(tabCounter) + "li" + temp +" " + op + operand);
+            releaseTemp(temp);
             return temp;
         } else {
             // Otherwise, it's a call, so just visit the call
@@ -148,7 +331,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         Matcher matcher = InstanceRegex.matcher(String.valueOf(val));
         if(!(matcher.matches())) {
             if (ctx.expression() != null) {
-                instructions.add("\t".repeat(tabCounter) + varName + ":= " + val);
+                instructions.add("\t".repeat(tabCounter) + "li" + " " + varName + " " + val);
             } else {
                 instructions.add("\t".repeat(tabCounter) + "ALLOC " + varName);
             }
@@ -167,13 +350,13 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                 instructions.add("\t".repeat(tabCounter) + "LOAD "  + pointer + " " +"SELF" + " " + ctx.IDENTIFIER().getText());
                 //get the new expression
                 String val = String.valueOf(visit(ctx.assignment()));
-                instructions.add("\t".repeat(tabCounter) + pointer + ":= " + val);
+                instructions.add("\t".repeat(tabCounter) + "li" + " " + pointer + " " + val);
             }
         }else{
             //get the new expression
             String name = ctx.IDENTIFIER().getText();
             String val = String.valueOf(visit(ctx.assignment()));
-            instructions.add("\t".repeat(tabCounter) + name + ":= " + val);
+            instructions.add("\t".repeat(tabCounter) + "li" + " " + name + " " + val);
         }
         return null;
     }
@@ -181,28 +364,46 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     @Override
     public Object visitIfStmt(CompiScriptParser.IfStmtContext ctx) {
         // Generate labels for true block, false block, and end
-        String labelElse = generateLabel();
+        String labelTrue = generateLabel();
+        String labelElse = "";
         String labelEnd = generateLabel();
 
         // Visit the condition expression
+        LabelStack.push(labelTrue);
+
+        if (ctx.statement(1) != null) {
+            labelElse = generateLabel();
+            inverseLabel = labelElse;
+        } else {
+            inverseLabel = labelEnd;
+        }
+
         String condition = String.valueOf(visit(ctx.expression()));
+        inverseLabel = "";
+        LabelStack.pop();
 
         // Generate TAC for the condition
-
-        instructions.add("\t".repeat(tabCounter) +generateConditionTAC(condition, labelElse));
+        instructions.add("\t".repeat(tabCounter) + labelTrue + ":");
         tabCounter++;
+
         // Visit the 'if' block (true case)
         visit(ctx.statement(0));  // The first statement is the 'if' body
 
         // Jump to end if true
-        instructions.add("\t".repeat(tabCounter) + "goto " + labelEnd);
+        if (!instructions.getLast().split(" ")[0].strip().stripIndent().startsWith("j")) {
+            instructions.add("\t".repeat(tabCounter) + "j " + labelEnd);
+        }
+
         tabCounter--;
-        // False block (else, if present)
-        instructions.add("\t".repeat(tabCounter) + labelElse + ":");
+
         if (ctx.statement(1) != null) {
+            // False block (else, if present)
+            instructions.add("\t".repeat(tabCounter) + labelElse + ":");
+            LabelStack.push(labelElse);
             tabCounter++;
             visit(ctx.statement(1));  // The second statement is the 'else' body
             tabCounter--;
+            LabelStack.pop();
         }
 
         // End label
@@ -222,14 +423,15 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         instructions.add("\t".repeat(tabCounter) + startLabel + ":");
 
         // Visit condition and generate condition TAC
+        inverseLabel=endLabel;
         String condition = String.valueOf(visit(ctx.expression()));
-        instructions.add("\t".repeat(tabCounter) +generateConditionTAC(condition, endLabel));
+        inverseLabel="";
         tabCounter ++;
         // Visit loop body
         visit(ctx.statement());
         tabCounter --;
         // Jump back to start to recheck condition
-        instructions.add("\t".repeat(tabCounter) + "goto " + startLabel);
+        instructions.add("\t".repeat(tabCounter) + "j " + startLabel);
 
         // End of the loop
         instructions.add("\t".repeat(tabCounter) + endLabel + ":");
@@ -256,8 +458,9 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         // Visit the condition expression (if present)
         if (ctx.expression(0) != null) {
+            inverseLabel=endLabel;
             String exprResult = String.valueOf(visit(ctx.expression(0)));
-            instructions.add(generateConditionTAC(exprResult, endLabel));
+            inverseLabel="";
         }
 
         // Visit loop body
@@ -270,7 +473,7 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         }
 
         // Jump back to condition
-        instructions.add("\t".repeat(tabCounter) + "goto " + startLabel);
+        instructions.add("\t".repeat(tabCounter) + "j " + startLabel);
 
         // End of the loop
         instructions.add("\t".repeat(tabCounter) + endLabel + ":");
@@ -299,11 +502,14 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     public Object visitFunction(CompiScriptParser.FunctionContext ctx) {
 
         String functionName = ctx.IDENTIFIER().getText();
-
+        if(ctx.block().declaration().isEmpty()){
+            return null;
+        }
+        instructions = jumpCalls;
         if(!CurrClasName.isEmpty()){
-            instructions.add("\t".repeat(tabCounter) + "FUN " + CurrClasName + "::" + functionName);
+            instructions.add("\t".repeat(tabCounter) + CurrClasName.toLowerCase() + "_" + functionName.toLowerCase() + ":");
         }else{
-            instructions.add("\t".repeat(tabCounter) + "FUN " + functionName);
+            instructions.add("\t".repeat(tabCounter)  + functionName.toLowerCase() + ":");
         }
 
         //add the parameters
@@ -319,14 +525,25 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         }
 
         // Visit the function body (block)
-
+        inFunction = true;
         visit(ctx.block());
+        inFunction = false;
+        instructions.add("\t".repeat(tabCounter) +"jr" +" " +"$ra");
         tabCounter --;
-        instructions.add("\t".repeat(tabCounter) +"ENDFUN");
+        instructions = mainCalls;
         return null;
     }
 
+    @Override
+    public Object visitReturnStmt(CompiScriptParser.ReturnStmtContext ctx){
+        Object val = null;
+        if (ctx.expression() != null){
+            val = String.valueOf(visit(ctx.expression()));
+            instructions.add("\t".repeat(tabCounter) +"li"+" "+ "$v0" + " " + val) ;
 
+        }
+        return val;
+    }
     @Override
     public Object visitCall(CompiScriptParser.CallContext ctx) {
         // Verificamos si estamos trabajando con una instancia de "new"
@@ -361,7 +578,14 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                     }
                 }
                 String pointer = newPointer();
-                instructions.add("\t".repeat(tabCounter) + "CALL "+ primary + " " + pointer);
+                instructions.add("\t".repeat(tabCounter) + "jal "+ primary + " " + pointer);
+                if(ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+                    CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
+                    for (int i = 0; i < arguments.getChildCount(); i += 2) {
+                        String arg = String.valueOf(visit(arguments.getChild(i)));
+                        instructions.add("\t".repeat(tabCounter) + "POP " + arg);
+                    }
+                }
                 return pointer;
             }
             else if (typePrimary instanceof Instance) {
@@ -393,19 +617,27 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
                                     "\t".repeat(tabCounter) + "LOAD "
                                             + lastPointer + " " + attr.replace("."," "));
                         } else if (ST.containsKey(method)) {//is a method
+                            //load it into a pointer
+                            lastPointer = newPointer();
                             instructions.add("\t".repeat(tabCounter) + "PUSH " + ((Instance) lastDeclaration).getLookUpName());
                             Method methodObj = (Method) ST.get(method).get("type");
                             String methodName = ctx.getChild(i).getText();
                             i += 2; //skip the opening brackets
+                            ArrayList<String> args = new ArrayList<>();
+                            instructions.add("\t".repeat(tabCounter) + "POP " + primary);
                             while (!ctx.getChild(i).getText().equals(")")) {
                                 String arg = String.valueOf(visit(ctx.getChild(i)));
+                                args.add(arg);
                                 instructions.add("\t".repeat(tabCounter) + "PUSH " + arg);
                                 i++;
                             }
                             instructions.add("\t".repeat(tabCounter) +
-                                    "CALL " + method.replace(".", "::") + " " + lastPointer
+                                    "jal " + method.replace(".", "_").toLowerCase() + " " + lastPointer
                             );
-
+                            instructions.add("\t".repeat(tabCounter) + "POP " + primary);
+                            args.forEach((arg) -> {
+                                instructions.add("\t".repeat(tabCounter) + "POP " + arg);
+                            });
                             lastDeclaration = ((Method)ST.get(method).get("type")).getReturnsType();
                         }
                     }
@@ -438,7 +670,15 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
         }
 
         // Llamada al constructor con la clase especificada
-        instructions.add("\t".repeat(tabCounter) + "CALL " + className + "::init");
+        instructions.add("\t".repeat(tabCounter) + "jal " + className + "::init");
+        instructions.add("\t".repeat(tabCounter) + "POP " + instanceName);
+        if (ctx.arguments() != null && !ctx.arguments().isEmpty()) {
+            CompiScriptParser.ArgumentsContext arguments = ctx.arguments();  // Primer set de argumentos
+            for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
+                String arg = String.valueOf(visit(arguments.getChild(i)));
+                instructions.add("\t".repeat(tabCounter) + "POP " + arg);  // Pushea cada argumento
+            }
+        }
         return new Instance("",className);
     }
     // Visit comparison (==, !=, >, <, >=, <=)
@@ -446,18 +686,38 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     public Object visitEquality(CompiScriptParser.EqualityContext ctx) {
         String left = String.valueOf(visit(ctx.comparison(0)));  // Visit the left side of the comparison
         String result = left;
-
+        String jump = "";
+        if (!LabelStack.isEmpty()){
+            jump = LabelStack.peek();
+        }
         // If there are multiple comparisons
         for (int i = 1; i < ctx.comparison().size(); i++) {
             String right = String.valueOf(visit(ctx.comparison(i)));
-            String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!=', '>', '<', etc.
+            String lastInstruction = "";
+            String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!='
 
-            // Generate TAC for the comparison operation
-            String temp = newTemp();
-            instructions.add("\t".repeat(tabCounter) + temp + ":= " + left + " " + operator + " " + right);
-            result = temp;  // The result becomes the new temporary variable
+            switch (operator){
+                case "==" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  + left +  " " + right + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + left +  " " + right + " " + inverseLabel);
+                    }
+                }
+                case "!=" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "bne"  + " "  + left +  " " + right + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  + left +  " " + right + " " + inverseLabel);
+                    }
+                }
+            }
+            if(result.startsWith("$t")) {
+                releaseTemp(result);
+            }
+            result = lastInstruction;  // The result becomes the new temporary variable
         }
-
+        if(result.startsWith("$t")) {
+            releaseTemp(result);
+        }
         return result;
     }
 
@@ -465,18 +725,53 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
     public Object visitComparison(CompiScriptParser.ComparisonContext ctx) {
         String left = String.valueOf(visit(ctx.term(0)));  // Visit the left side of the comparison
         String result = left;
-
+        String jump = "";
+        if (!LabelStack.isEmpty()){
+            jump = LabelStack.peek();
+        }
         // If there are multiple comparisons
         for (int i = 1; i < ctx.term().size(); i++) {
+            String temp = newTemp(0);
             String right = String.valueOf(visit(ctx.term(i)));
-            String operator = ctx.getChild(2 * i - 1).getText(); // '==', '!=', '>', '<', etc.
+            String operator = ctx.getChild(2 * i - 1).getText(); //'>' | '>=' | '<' | '<='
 
-            // Generate TAC for the comparison operation
-            String temp = newTemp();
-            instructions.add("\t".repeat(tabCounter) + temp + ":= " + left + " " + operator + " " + right);
+            switch (operator){
+                case ">=" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "slt"  + " " + temp + " " +right + " " + left);
+                    instructions.add("\t".repeat(tabCounter)  + "beq"  + " "  + temp + " $zero" + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " + left + " " + right + " " + inverseLabel);
+                    }
+                }
+                case "<=" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp +  " " +  left + " " + right);
+                    instructions.add("\t".repeat(tabCounter)  + "beq" + " " + temp + " $zero"  + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " +  right + " " + left  + " " + inverseLabel);
+                    }
+                }
+                case "<" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " + left + " " + right + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " +  right + " " + left  + " " + inverseLabel);
+                    }
+                }
+                case ">" -> {
+                    instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " +  right + " " + left  + " " + jump);
+                    if (!inverseLabel.isBlank()){
+                        instructions.add("\t".repeat(tabCounter)  + "slt" + " " + temp  + " " + left + " " + right + " " + inverseLabel);
+                    }
+                }
+            }
+            if(result.startsWith("$t")) {
+                releaseTemp(result);
+            }
+
             result = temp;  // The result becomes the new temporary variable
         }
-
+        if(result.startsWith("$t")) {
+            releaseTemp(result);
+        }
         return result;
     }
 
@@ -487,8 +782,11 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         for (int i = 1; i < ctx.getChildCount(); i += 2) {
             String nextComparison = String.valueOf(visit(ctx.logic_and(i + 1)));
-            String temp = newTemp();
+            String temp = newTemp(0);
             instructions.add("\t".repeat(tabCounter) + temp + ":= " + result + " || " + nextComparison);
+            if(result.startsWith("$t")) {
+                releaseTemp(result);
+            }
             result = temp;
         }
         return result;
@@ -501,8 +799,11 @@ public class IntermediateCodeVisitor extends CompiScriptBaseVisitor<Object> {
 
         for (int i = 1; i < ctx.getChildCount(); i += 2) {
             String nextComparison = String.valueOf(visit(ctx.equality(i + 1)));
-            String temp = newTemp();
+            String temp = newTemp(0);
             instructions.add("\t".repeat(tabCounter) + temp + ":= " + result + " && " + nextComparison);
+            if(result.startsWith("$t")) {
+                releaseTemp(result);
+            }
             result = temp;
         }
         return result;
