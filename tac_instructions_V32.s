@@ -1,5 +1,7 @@
 .data
 _V_resultado: .word 2
+_V_a: .word 1
+_V_b: .word 1
 #-----MAIN LOOP -----
 .text
 .globl main
@@ -36,15 +38,19 @@ fibonacci:
 		jal fibonacci
 		lw $a0 , 0($sp)
 		lw $ra , 4($sp)
-		move $t1 , $v0
-		addi $t0 , $a0 , -2
-		move $a0 , $t0
+		la $s0 , _V_a
+		sw $v0 , 0($s0)
+		addi $t1 , $a0 , -2
+		move $a0 , $t1
 		jal fibonacci
 		lw $a0 , 0($sp)
 		lw $ra , 4($sp)
-		move $t0 , $v0
-		add $t0, $t1, $t0
-		move $v0 , $t0
+		la $s0 , _V_b
+		sw $v0 , 0($s0)
+		lw $t1 , _V_a
+		lw $t0 , _V_b
+		add $t2, $t1, $t0
+		move $v0 , $t2
 		lw $ra , 4($sp)
 		add $sp, $sp, 8
 		jr $ra

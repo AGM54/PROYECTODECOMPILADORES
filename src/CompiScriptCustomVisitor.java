@@ -360,7 +360,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             varMap.put("scope",ScopesStack.peek());
             scopedSymbolTable.get(ScopesStack.peek().toString()).put(varName, varMap);
         }else{
-            throw new RuntimeException("Error: Variable already defined " + varName);
+            if(currCallName.isBlank()) {
+                throw new RuntimeException("Error: Variable already defined " + varName);
+            }
         }
         return null;
     }
@@ -584,7 +586,9 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
             Object express = visit(ctx.expression());
             if (express != null){
                 for(String stack : scopedDeclaredFunctions.keySet()){
-                    ( ( Function)scopedDeclaredFunctions.get(stack).get(CurrFuncName).get("type") ).setReturnsType(express);
+                    if(!CurrFuncName.isBlank()) {
+                        ((Function) scopedDeclaredFunctions.get(stack).get(CurrFuncName).get("type")).setReturnsType(express);
+                    }
                 }
             }
             return express;

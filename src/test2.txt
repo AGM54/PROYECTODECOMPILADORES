@@ -2,8 +2,11 @@ fun fibonacci(n) {
   if (n <= 1) {
     return 1;
   } else {
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    var a = fibonacci(n - 1);
+    var b = fibonacci(n - 2);
+    return a + b;
   }
 }
+
 var resultado = fibonacci(5);
 print resultado;
