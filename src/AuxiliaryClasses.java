@@ -52,7 +52,11 @@ class Function {
         return this.returnsType;
     }
 } //a function
-class Class {} // a class , no rocket science
+class Class {
+    public String name = "";
+    public int size = 0;
+
+} // a class , no rocket science
 class Instance{
     private String clasName;
     private String lookUpName;

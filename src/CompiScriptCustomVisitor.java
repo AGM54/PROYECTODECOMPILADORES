@@ -431,6 +431,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
         String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functsMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -631,12 +633,14 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                         // Insert new scope into the symbol table maps
                         String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                        symbolMap.putAll(originalSymbols);
                         scopedDeclaredFunctions.put(newScope, functMap);
                         scopedSymbolTable.put(newScope, symbolMap);
                         scopedDeclaredClasses.put(newScope, classMap);
                         scopedParametersDeclarations.put(newScope, paramMap);
                         // Push the new Scope into the stack
-                        ScopesStack.push(newScope);
+                        ScopesStack.push(getNewScope(newScope));
                         //push the parameters into the scope
                         for (int i = 0; i < requParams.size(); i++) {
                             String paramName = requParams.get(i).toString();
@@ -714,6 +718,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                     // Insert new scope into the symbol table maps
                                     String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                    Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                    symbolMap.putAll(originalSymbols);
                                     scopedDeclaredFunctions.put(newScope, functMap);
                                     scopedSymbolTable.put(newScope, symbolMap);
                                     scopedDeclaredClasses.put(newScope, classMap);
@@ -791,6 +797,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                             Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                             // Insert new scope into the symbol table maps
                                             String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                            Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                            symbolMap.putAll(originalSymbols);
                                             scopedDeclaredFunctions.put(newScope, functMap);
                                             scopedSymbolTable.put(newScope, symbolMap);
                                             scopedDeclaredClasses.put(newScope, classMap);
@@ -944,6 +952,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                                 Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                                 // Insert new scope into the symbol table maps
                                 String newScope = Integer.toString((functMap.size() + symbolMap.size() + classMap.size() + paramMap.size()));
+                                Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                                symbolMap.putAll(originalSymbols);
                                 scopedDeclaredFunctions.put(newScope, functMap);
                                 scopedSymbolTable.put(newScope, symbolMap);
                                 scopedDeclaredClasses.put(newScope, classMap);
@@ -990,6 +1000,10 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         }
 
         return returner;
+    }
+
+    private static String getNewScope(String newScope) {
+        return newScope;
     }
 
     //visit the arguments
@@ -1043,6 +1057,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                     Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
                     String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));;
                     // Insert new scope into the symbol table maps
+                    Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+                    symbolMap.putAll(originalSymbols);
                     scopedDeclaredFunctions.put(newScope, functMap);
                     scopedSymbolTable.put(newScope, symbolMap);
                     scopedDeclaredClasses.put(newScope, classMap);
@@ -1143,6 +1159,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
                 }
             }
         }
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);
@@ -1611,6 +1629,8 @@ public class CompiScriptCustomVisitor   extends CompiScriptBaseVisitor<Object> {
         Map<String, Map<String, Object>> paramMap = new HashMap<>(scopedParametersDeclarations.getOrDefault(ScopesStack.peek(), new HashMap<>()));
         // Insert new scope into the symbol table maps
         String newScope = Integer.toString((functMap.size() + symbolMap.size()+classMap.size()+paramMap.size()));
+        Map<String, Map<String, Object>> originalSymbols = new HashMap<>(scopedSymbolTable.getOrDefault(newScope, new HashMap<>()));
+        symbolMap.putAll(originalSymbols);
         scopedDeclaredFunctions.put(newScope, functMap);
         scopedSymbolTable.put(newScope, symbolMap);
         scopedDeclaredClasses.put(newScope, classMap);

@@ -284,6 +284,9 @@ clear_done:
         /*
         Calculates the size in bytes given the java type
          */
+        if (type instanceof Class classic){
+            return classic.size;
+        }
         switch (type.getClass().getSimpleName()) {
             case "Integer":
                 return 4;
@@ -490,8 +493,6 @@ clear_done:
         instructions.add("\t".repeat(tabCounter) + "mfhi " + save.pointer); // Move quotient to save
     }
 
-
-
     //flow control methods
     public void jumpTo(String destination){
         instructions.add("\t".repeat(tabCounter) + "j " + destination);
@@ -529,9 +530,13 @@ clear_done:
     }
 
     //stack methods
-    public void reserveOnStack(int size){
-        instructions.add("\t".repeat(tabCounter) + "sub $sp, $sp, " + size);
+    public int reserveOnStack(int size){
+        // Ensure the size is a multiple of 4
+        int alignedSize = (size + 3) & ~3; // Round up to the nearest multiple of 4
+
+        instructions.add("\t".repeat(tabCounter) + "sub $sp, $sp, " + alignedSize);
         StackPointer += size;
+        return alignedSize;
     }
     public void releaseOnStack(int size){
         instructions.add("\t".repeat(tabCounter) + "add $sp, $sp, " + size);
@@ -618,7 +623,7 @@ clear_done:
 
     }
 
-    public void concatString (String str){
+    public void concatString (Object str){
         addConcats = true;
         if(!hasStringBuffer){ //no string buffer yet? create it
             hasStringBuffer = true;
@@ -635,12 +640,23 @@ clear_done:
             }
         }
         if(offset > 0){
-            reserveOnStack(offset);
+            offset = reserveOnStack(offset);
         }
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
             saveWordInto(rec.getValue(),rec.getKey());
         }
-        loadAddres("$a0",getConstantLabel(str));
+        if(str instanceof Register r){
+            if(r.pointer.endsWith("($a0)")){ //so it was an instance thing
+                Register tmp = createTemporal(r.value);
+                loadAddres(tmp.pointer,r.pointer);
+                loadWord("$a0", "0(" + tmp.pointer +")");
+                releaseRegister(r.pointer);
+        }
+        }else{
+            assert  str instanceof String;
+            String label = getConstantLabel((String) str);
+            loadAddres("$a0", label.isBlank()? "_B_" : label);
+        }
         jumpAndLink("concat_string_str");
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
             loadWord(rec.getKey(),rec.getValue());
@@ -655,17 +671,9 @@ clear_done:
             hasStringBuffer = true;
             dataHeader.add("_B_ : .space 200");
         }
-        //check that the requiered registers are free, otherwise save into pointer
-        if (val instanceof Register v){
-            moveInto("$a0",v.pointer);
-            releaseRegister(v.pointer);
-        }else{
-            Register tmp = createTemporal(val);
-            loadInmediate(tmp.pointer,val);
-            moveInto("$a0",tmp.pointer);
-            releaseRegister(tmp.pointer);
-        }
         int offset = 0;
+
+        //check that the requiered registers are free, otherwise save into pointer
         String checkList[] = {"$t0", "$t1","$t2","$t3","$t4","$t5","$a0" };
         HashMap<String,String> recoverAddres = new HashMap<>();
         for (String register: checkList){
@@ -675,11 +683,29 @@ clear_done:
             }
         }
         if(offset > 0){
-            reserveOnStack(offset);
+            offset = reserveOnStack(offset);
         }
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){
             loadWord(rec.getKey(),rec.getValue());
             saveWordInto(rec.getValue(),rec.getKey());
+        }
+
+
+        if (val instanceof Register v){
+            if(v.pointer.endsWith("($a0)")){ //so it was an instance thing
+                Register tmp = createTemporal(v.value);
+                loadWord(tmp.pointer,v.pointer);
+                loadWord("$a0","0(" + tmp.pointer +")");
+                releaseRegister(v.pointer);
+            }else{
+                moveInto("$a0",v.pointer);
+                releaseRegister(v.pointer);
+            }
+        }else{
+            Register tmp = createTemporal(val);
+            loadInmediate(tmp.pointer,val);
+            moveInto("$a0",tmp.pointer);
+            releaseRegister(tmp.pointer);
         }
         jumpAndLink("concat_string_int");
         for(Map.Entry<String,String> rec : recoverAddres.entrySet()){

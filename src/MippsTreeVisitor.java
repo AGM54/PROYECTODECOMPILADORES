@@ -66,21 +66,26 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         if (name.split("\\.").length > 1) {
             return;
         }
-        if (value.get("type") instanceof Instance) {
+        if (value.get("type") instanceof Instance ins) {
             //group all the attributes
             mips.saveIntoData(name);
             List<Map<String, Map<String, Object>>> results = search(name + '.', this.ST);
             for (Map<String, Map<String, Object>> entry : results) {
                 for (String key : entry.keySet()) {
                     Map<String, Object> innerMap = entry.get(key);
+                    if(ST.get(key.replace(ins.getLookUpName() + ".", ins.getClasName() + ".")).get("type")
+                            != (innerMap.get("type"))){
+                        ST.get(key.replace(ins.getLookUpName() + ".", ins.getClasName() + "."))
+                                .put("type", innerMap.get("type"));
+                    }
                     if (!(innerMap.get("type") instanceof Instance)) {
                         mips.saveIntoData(key.split("\\.")[1], innerMap.get("type"), true);
                     }
                 }
             }
         } else {
-            ST.get(name).put("type", new Variable(name, value.get("type")));
-            mips.saveIntoData(name, value.get("type"), false);
+            ST.get(name).put("type", new Variable("_V_" + name, value.get("type")));
+            mips.saveIntoData("_V_" + name, value.get("type"), false);
         }
 
     }
@@ -118,6 +123,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     }
                 }
             }
+            ((Class)CT.get(name).get("type")).size = offset;
         }
         for (Map.Entry<String, Map<String, Object>> entry : FT.entrySet()) {
             String key = entry.getKey();
@@ -242,7 +248,11 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         mips.sum(temp, result, nextFactor);
                     } else { //string concatenations
                         if(rType instanceof String rr){
-                            mips.concatString(rr);
+                            if (result instanceof Register rs){
+                                mips.concatString(rs);
+                            }else{
+                                mips.concatString(rr);
+                            }
                         } else if (rType instanceof Number number) {
                             if (result instanceof Register rr){
                                 mips.concatInteger(rr);
@@ -251,7 +261,11 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                             }
                         }
                         if(nType instanceof String rr){
-                            mips.concatString(rr);
+                            if (nextFactor instanceof Register rs){
+                                mips.concatString(rs);
+                            }else{
+                                mips.concatString(rr);
+                            }
                         } else if (nType instanceof Number number) {
                             if (nextFactor instanceof Register rr){
                                 mips.concatInteger(rr);
@@ -391,6 +405,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     }
                     break;
                 case "!":
+                    //Invert the labales
                     throw new RuntimeException("Oi mate, negating a boolean is not implemented yet");
             }
             // Generate TAC for the unary operation
@@ -409,7 +424,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             if (ctx.expression() != null) {
                 String name = ctx.IDENTIFIER().getText();
                 Register save = mips.createSave(new Variable(name,val));
-                mips.loadAddres(save.pointer, name);
+                mips.loadAddres(save.pointer, "_V_" + name);
                 if (val instanceof Register) {
                     mips.saveWordInto("0(" + save.pointer + ")",((Register) val).pointer);
                 } else if (val instanceof Variable) {
@@ -421,10 +436,21 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     }
                     mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
                 }else{
-                    Register valPointer = mips.createTemporal(val);
-                    mips.loadInmediate(valPointer.pointer,val);
-                    mips.releaseRegister(valPointer.pointer);
-                    mips.saveWordInto("0(" + save.pointer + ")",((Register) valPointer).pointer);
+                    if (val instanceof String str){
+                        Register valPointer = mips.createTemporal(val);
+                        if(mips.getConstantLabel(str).isBlank()){
+                            mips.loadAddres(valPointer.pointer, "_B_");
+                        }else {
+                            mips.loadAddres(valPointer.pointer, mips.getConstantLabel(str));
+                        }
+                        mips.releaseRegister(valPointer.pointer);
+                        mips.saveWordInto("0(" + save.pointer + ")", ((Register) valPointer).pointer);
+                    }else {
+                        Register valPointer = mips.createTemporal(val);
+                        mips.loadInmediate(valPointer.pointer, val);
+                        mips.releaseRegister(valPointer.pointer);
+                        mips.saveWordInto("0(" + save.pointer + ")", ((Register) valPointer).pointer);
+                    }
                 }
                 mips.releaseRegister(save.pointer);
             }
@@ -452,16 +478,33 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                     mips.releaseRegister(v.pointer);
                 } else if (val instanceof String s) {
                     String ref = mips.getConstantLabel(s);
-                } else if(val instanceof Param param){
-                    if (val instanceof String s) {
-                    }else{
-                        mips.saveWordInto(self.pointer, param.pointerRef);
+                } else if(val instanceof Param param) {
+                    mips.saveWordInto(self.pointer, param.pointerRef);
+                }
+                else if (val instanceof Variable var) {
+                    Register valPointer = mips.getRegister(var);
+                    if (valPointer == null){
+                        valPointer = mips.createTemporal(var);
+                        mips.loadWord(valPointer.pointer,var.name);
+                        mips.releaseRegister(valPointer.pointer);
                     }
+                    mips.saveWordInto( self.pointer ,((Register) valPointer).pointer);
                 }else {
-                    Register temp = mips.createTemporal(val);
-                    mips.loadInmediate(temp.pointer, val);
-                    mips.saveWordInto(self.pointer, temp.pointer);
-                    mips.releaseRegister(temp.pointer);
+                    if (val instanceof String str){
+                        Register valPointer = mips.createTemporal(val);
+                        if(mips.getConstantLabel(str).isBlank()){
+                            mips.loadAddres(valPointer.pointer, "_B_");
+                        }else {
+                            mips.loadAddres(valPointer.pointer, mips.getConstantLabel(str));
+                        }
+                        mips.releaseRegister(valPointer.pointer);
+                        mips.saveWordInto("0(" + self.pointer + ")", ((Register) valPointer).pointer);
+                    }else {
+                        Register valPointer = mips.createTemporal(val);
+                        mips.loadInmediate(valPointer.pointer, val);
+                        mips.releaseRegister(valPointer.pointer);
+                        mips.saveWordInto("0(" + self.pointer + ")", ((Register) valPointer).pointer);
+                    }
                 }
             }
         } else {
@@ -473,7 +516,7 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                 if (ctx.assignment() != null) {
                     String name = ctx.IDENTIFIER().getText();
                     Register saveReg = mips.createSave(null); // no value ( for now )
-                    mips.loadAddres(saveReg.pointer, name);
+                    mips.loadAddres(saveReg.pointer, "_V_" + name);
                     if (val instanceof Register v) {
                         mips.saveWordInto("0(" + saveReg.pointer + ")" , v.pointer);
                         mips.releaseRegister(v.pointer);
@@ -532,8 +575,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                 }
             }
 
-            Object nextFactor = visit(ctx.comparison(i));
-
             if (right instanceof Variable var) { //is a variable
                 if (mips.getRegister(var) == null) {
                     //then we need to load
@@ -576,7 +617,6 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             mips.releaseRegister(((Register)right).pointer);
             left = right;  // The result becomes the new temporary variable
         }
-
        return null;
     }
     @Override
@@ -859,20 +899,22 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
             CompiScriptParser.ArgumentsContext arguments = ctx.arguments();  // Primer set de argumentos
             for (int i = 0; i < arguments.getChildCount(); i += 2) {  // Itera sobre los argumentos
                 Object arg = visit(arguments.getChild(i));
-                Register argRegister = mips.createArgument(arg);
-                if (arg instanceof Variable) {
+                Register argRegister = null;
+                if (arg instanceof Variable var) {
                     Register pointerVar = mips.getRegister(arg);
+                    argRegister = mips.createArgument(var.value);
                     if(pointerVar == null){
                         mips.loadWord(argRegister.pointer,((Variable) arg).name);
                     }else{
                         mips.moveInto(argRegister.pointer,pointerVar.pointer);
                         mips.releaseRegister(pointerVar.pointer);
                     }
-                    mips.releaseRegister(pointerVar.pointer);
                 } else if(arg instanceof Register r){
+                    argRegister = mips.createArgument(r.value);
                     mips.moveInto(argRegister.pointer,r.pointer);
                     mips.releaseRegister(r.pointer);
                 }else{
+                    argRegister = mips.createArgument(arg);
                     mips.loadInmediate(argRegister.pointer,arg);
                 }
                 if (argsCounter > 3) {
@@ -913,7 +955,9 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
         //add the parameters
         mips.tabsIncrease();
         if(!CurrClasName.isBlank()){
-           mips.createArgument(CT.get(CurrClasName).get("type"));
+            Class tt = (Class) CT.get(CurrClasName).get("type");
+            tt.name = CurrClasName;
+           mips.createArgument(tt);
         }
         int StackReserve = 0;
         if(((Function) FT.get(CurrentFunction).get("type")).getIsRecursive()) {
@@ -1176,10 +1220,10 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                                 );
                         mips.setRegister(lastPointer.pointer,lastDeclaration);
                     }
-                    else if (ST.containsKey(method)) {//is a method
+                    else if (FT.containsKey(method)) {//is a method
                         //load it into a pointer
                         lastPointer = mips.setReturnRegister(
-                                ((Function) ST.get(method).get("type")).getReturnsType()
+                                ((Function) FT.get(method).get("type")).getReturnsType()
                         );
                         int argsCounter = 0;
                         int stackReserve = 0;
@@ -1187,14 +1231,14 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         while(!ctx.getChild(i).getText().equals(")")){
                             i++;
                         }
-
-
+                        mips.createArgument(ims);
+                        mips.loadAddres("$a0", ims.getLookUpName().toLowerCase());
                         if(ctx.arguments() != null && !ctx.arguments().isEmpty()) {
                             CompiScriptParser.ArgumentsContext arguments = ctx.arguments().getFirst();
                             for (int j = 0; j< arguments.getChildCount(); j += 2) {
                                 Object arg = visit(arguments.getChild(j));
                                 Register argRegister = mips.createArgument(arg);
-                                if (argsCounter < 5){
+                                if (argsCounter > 4){
                                     mips.SwitchToTemporalInstructionsSet();
                                     if (arg instanceof Variable var) {
                                         Register pointerVar = mips.getRegister(arg);
@@ -1234,8 +1278,15 @@ public class MippsTreeVisitor extends CompiScriptBaseVisitor<Object> {
                         }
                         if(argsCounter > 4){
                             mips.reserveOnStack(stackReserve);
-                            mips.SwitchToLocal();
+                            mips.SwitchToMain();
                             mips.PushTemporalInstructions();
+                        }
+                        mips.jumpAndLink(
+                                ims.getClasName().toLowerCase() + "_" +
+                                ((Function) FT.get(method).get("type")).getFunName().toLowerCase());
+                        mips.resetArguments();
+                        if(argsCounter > 4){
+                            mips.releaseOnStack(stackReserve);
                         }
                     }
                 }
